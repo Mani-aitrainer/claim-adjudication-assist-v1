@@ -1,0 +1,52 @@
+{
+  "decision": {
+    "citations": [
+      "PH-8.5"
+    ],
+    "payable_amount": 0,
+    "per_line": [
+      {
+        "claimed": 3000,
+        "clause_id": "PH-8.5",
+        "code": "NDC-00099-0001",
+        "payable": 0
+      }
+    ],
+    "status": "DENY"
+  },
+  "description": "Non-formulary drug, no prior authorisation",
+  "domain": "pharmacy",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 3000,
+    "currency": "INR",
+    "line_items": [
+      {
+        "amount": 3000,
+        "code": "NDC-00099-0001",
+        "description": "ExperimentalDrugX 200mg",
+        "unit_price": 3000,
+        "units": 1
+      }
+    ],
+    "member_id": "MEM2003",
+    "pharmacy_id": "PHM01",
+    "pharmacy_name": "Wellness Pharmacy",
+    "policy_no": "POL200003",
+    "procedure_codes": [
+      "NDC-00099-0001"
+    ],
+    "service_date": "2024-03-07"
+  },
+  "heal_attempts": 0,
+  "id": "PHR-003",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

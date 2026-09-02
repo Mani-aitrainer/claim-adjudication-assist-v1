@@ -1,0 +1,59 @@
+{
+  "decision": {
+    "citations": [
+      "DG-4.1"
+    ],
+    "payable_amount": 5000,
+    "per_line": [
+      {
+        "claimed": 5000,
+        "clause_id": "DG-4.1",
+        "code": "CPT-71046",
+        "payable": 5000
+      }
+    ],
+    "status": "APPROVE"
+  },
+  "description": "Adjudicator's first decision cites a clause not in retrieved context \u2014 heals once",
+  "domain": "claims",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 5000,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "J18.9"
+    ],
+    "line_items": [
+      {
+        "amount": 5000,
+        "code": "CPT-71046",
+        "description": "Chest X-ray",
+        "units": 1
+      }
+    ],
+    "member_age": 34,
+    "member_id": "MEM1001",
+    "network_status": "in_network",
+    "policy_no": "POL100001",
+    "procedure_codes": [
+      "CPT-71046"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-03-25",
+    "service_start_date": "2024-03-25"
+  },
+  "heal_attempts": 1,
+  "id": "CLM-012",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

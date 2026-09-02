@@ -1,0 +1,44 @@
+# Business rules for ClaimValidatorAgent (validate_node). Deterministic — no LLM.
+# Rule codes match Agent Specifications > ClaimValidatorAgent in DEVELOPMENT_PLAN.md.
+
+required_fields:
+  - member_id
+  - policy_no
+  - service_start_date
+  - service_end_date
+  - claimed_amount
+  - line_items
+
+member_id_pattern: '^MEM\d{4}$'
+icd_code_pattern: '^[A-Z]\d{2}(\.\d{1,4})?$'
+cpt_code_pattern: '^CPT-[A-Z0-9]{5}$'
+
+date_sanity:
+  max_service_span_days: 90
+
+amount_balance:
+  tolerance: 1
+
+# repairable vs unrepairable rule codes — the router (P4) sends repairable failures to
+# FieldRepairAgent and routes unrepairable ones (genuinely wrong data, not an OCR problem)
+# straight through to adjudication for a proper denial.
+repairable_rule_codes:
+  - REQ_FIELD
+  - MEMBER_ID_FORMAT
+  - CODE_FORMAT_ICD
+  - CODE_FORMAT_CPT
+  - DATE_ORDER
+  - DATE_SANITY
+  - AMOUNT_POSITIVE
+  - AMOUNT_BALANCE
+unrepairable_rule_codes:
+  - POLICY_WINDOW
+
+# Minimal per-policy validity lookup for the POLICY_WINDOW rule. A production system would
+# call a policy/member service; for this training project the mapping is small, deterministic,
+# and mirrors testdata/seeds/members.yaml exactly.
+policy_periods:
+  POL100001: {start: "2024-01-01", end: "2024-12-31"}
+  POL100002: {start: "2023-01-01", end: "2024-12-31"}
+  POL100003: {start: "2023-07-01", end: "2024-12-31"}
+  POL100004: {start: "2022-01-01", end: "2022-12-31"}

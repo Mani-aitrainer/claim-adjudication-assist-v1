@@ -1,0 +1,57 @@
+{
+  "decision": {
+    "citations": [
+      "EX-7.1"
+    ],
+    "payable_amount": 0,
+    "per_line": [
+      {
+        "claimed": 45000,
+        "clause_id": "EX-7.1",
+        "code": "CPT-15823",
+        "payable": 0
+      }
+    ],
+    "status": "DENY"
+  },
+  "description": "Cosmetic blepharoplasty \u2014 excluded",
+  "domain": "claims",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 45000,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "H02.831"
+    ],
+    "line_items": [
+      {
+        "amount": 45000,
+        "code": "CPT-15823",
+        "description": "Blepharoplasty",
+        "units": 1
+      }
+    ],
+    "member_age": 34,
+    "member_id": "MEM1001",
+    "network_status": "in_network",
+    "policy_no": "POL100001",
+    "procedure_codes": [
+      "CPT-15823"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-04-01",
+    "service_start_date": "2024-04-01"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-003",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

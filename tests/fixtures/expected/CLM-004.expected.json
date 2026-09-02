@@ -1,0 +1,57 @@
+{
+  "decision": {
+    "citations": [
+      "MT-5.3"
+    ],
+    "payable_amount": 0,
+    "per_line": [
+      {
+        "claimed": 15000,
+        "clause_id": "MT-5.3",
+        "code": "CPT-59400",
+        "payable": 0
+      }
+    ],
+    "status": "DENY"
+  },
+  "description": "Maternity claim \u2014 policy only 8 months old, waiting period not served",
+  "domain": "claims",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 15000,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "Z34.00"
+    ],
+    "line_items": [
+      {
+        "amount": 15000,
+        "code": "CPT-59400",
+        "description": "Obstetric care",
+        "units": 1
+      }
+    ],
+    "member_age": 29,
+    "member_id": "MEM1003",
+    "network_status": "in_network",
+    "policy_no": "POL100003",
+    "procedure_codes": [
+      "CPT-59400"
+    ],
+    "provider_id": "PRV02",
+    "provider_name": "Sunrise Hospital",
+    "service_end_date": "2024-03-01",
+    "service_start_date": "2024-03-01"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-004",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

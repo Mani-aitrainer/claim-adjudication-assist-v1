@@ -1,0 +1,170 @@
+# Synthetic policy corpus. Every clause carries an explicit clause_id — that is what the
+# PolicyAdjudicatorAgent cites and what the DecisionAuditorAgent verifies (P6/P7).
+
+product:
+  code: HEALTHSECURE-GOLD-2024
+  name: "HealthSecure Gold 2024"
+  sum_insured: 500000
+  currency: INR
+  product_period:
+    start: "2024-01-01"
+    end: "2024-12-31"
+
+documents:
+  - doc_id: POL-WORDING
+    title: "HealthSecure Gold 2024 — Policy Wording"
+    filename: policy_wording.pdf
+  - doc_id: MEMBER-HANDBOOK
+    title: "HealthSecure Gold — Member Handbook"
+    filename: member_handbook.pdf
+  - doc_id: PROC-ANNEXURE
+    title: "Procedure Code Annexure"
+    filename: procedure_code_annexure.pdf
+
+clauses:
+  - clause_id: OP-3.2
+    type: benefit
+    title: "Outpatient Consultation"
+    text: >
+      [Clause OP-3.2] Outpatient consultation is covered under this policy. Reimbursement
+      is subject to a sub-limit of INR 1,500 per visit, up to a maximum of 6 visits per
+      policy year.
+    sub_limit_per_visit: 1500
+    max_visits_per_year: 6
+
+  - clause_id: IP-2.1
+    type: benefit
+    title: "Inpatient Hospitalisation"
+    text: >
+      [Clause IP-2.1] Inpatient hospitalisation expenses are covered up to the sum insured
+      of INR 5,00,000 per policy year.
+
+  - clause_id: IP-2.4
+    type: condition
+    title: "Co-Payment For Senior Members"
+    text: >
+      [Clause IP-2.4] A co-payment of 20% applies to all inpatient hospitalisation claims
+      for members aged 60 years and above at the time of admission.
+    copay_percent: 20
+    min_age: 60
+
+  - clause_id: DG-4.1
+    type: benefit
+    title: "Diagnostics"
+    text: >
+      [Clause DG-4.1] Diagnostic tests, including imaging and laboratory investigations,
+      are covered subject to an annual sub-limit of INR 8,000.
+    annual_sub_limit: 8000
+
+  - clause_id: MT-5.3
+    type: benefit_waiting
+    title: "Maternity Benefit"
+    text: >
+      [Clause MT-5.3] Maternity expenses, including obstetric care and delivery, are
+      covered after a continuous waiting period of 24 months from the policy inception
+      date for the member.
+    waiting_period_months: 24
+
+  - clause_id: PE-6.2
+    type: waiting
+    title: "Pre-Existing Conditions"
+    text: >
+      [Clause PE-6.2] Treatment for pre-existing conditions declared at inception is
+      covered only after a continuous waiting period of 36 months from the policy
+      inception date.
+    waiting_period_months: 36
+
+  - clause_id: EX-7.1
+    type: exclusion
+    title: "Cosmetic Procedures"
+    text: >
+      [Clause EX-7.1] Cosmetic and aesthetic procedures, including but not limited to
+      blepharoplasty performed for cosmetic reasons, are excluded from coverage under
+      this policy.
+
+  - clause_id: EX-7.4
+    type: exclusion
+    title: "Dental Treatment"
+    text: >
+      [Clause EX-7.4] Dental treatment is excluded from coverage unless required as a
+      direct result of an accidental injury.
+
+  - clause_id: PH-8.1
+    type: benefit
+    title: "Pharmacy Benefit"
+    text: >
+      [Clause PH-8.1] Generic medication is reimbursed at 100% of the billed amount.
+      Branded medication is reimbursed at 80% of the billed amount where a generic
+      equivalent exists in the formulary.
+    generic_reimbursement_percent: 100
+    branded_reimbursement_percent: 80
+
+  - clause_id: PH-8.5
+    type: exclusion
+    title: "Non-Formulary Drugs"
+    text: >
+      [Clause PH-8.5] Non-formulary drugs are excluded from coverage unless prior
+      authorisation has been obtained before dispensing.
+
+  - clause_id: NW-9.2
+    type: condition
+    title: "Out-Of-Network Providers"
+    text: >
+      [Clause NW-9.2] Treatment received from an out-of-network provider is reimbursed
+      at 70% of the otherwise-payable amount.
+    out_of_network_reimbursement_percent: 70
+
+member_handbook_paragraphs:
+  - clause_ref: OP-3.2
+    text: >
+      Popping in for a doctor's consultation as an outpatient? We've got you covered —
+      up to INR 1,500 each visit, and you can claim this up to six times in a policy year.
+  - clause_ref: IP-2.4
+    text: >
+      If you're 60 or older when you're admitted to hospital, you'll share 20% of the
+      inpatient bill with us as a co-payment.
+  - clause_ref: DG-4.1
+    text: >
+      Lab tests and scans are covered, but we cap diagnostics reimbursement at
+      INR 8,000 across the whole policy year.
+  - clause_ref: MT-5.3
+    text: >
+      Planning a family? Maternity cover kicks in once you've been continuously
+      insured with us for 24 months.
+  - clause_ref: EX-7.1
+    text: >
+      Purely cosmetic procedures — anything done to enhance appearance rather than
+      treat a medical condition — are not something this policy pays for.
+  - clause_ref: EX-7.4
+    text: >
+      Routine dental work isn't covered. The only exception is dental treatment made
+      necessary by an accident.
+  - clause_ref: PH-8.1
+    text: >
+      Choosing the generic version of a medicine gets you full reimbursement. Pick the
+      branded version instead, and we'll cover 80% of the cost, as long as a generic
+      alternative exists.
+  - clause_ref: NW-9.2
+    text: >
+      Prefer a hospital or clinic outside our network? That's fine, but we reimburse
+      70% of the amount we would otherwise have paid.
+
+procedure_code_annexure:
+  - code: CPT-99213
+    benefit_category: Outpatient Consultation
+    clause_id: OP-3.2
+  - code: CPT-71046
+    benefit_category: Diagnostics
+    clause_id: DG-4.1
+  - code: CPT-27447
+    benefit_category: Inpatient Hospitalisation
+    clause_id: IP-2.1
+  - code: CPT-15823
+    benefit_category: Cosmetic Procedures (Excluded)
+    clause_id: EX-7.1
+  - code: CPT-59400
+    benefit_category: Maternity Benefit
+    clause_id: MT-5.3
+  - code: CPT-D2740
+    benefit_category: Dental Treatment (Excluded)
+    clause_id: EX-7.4

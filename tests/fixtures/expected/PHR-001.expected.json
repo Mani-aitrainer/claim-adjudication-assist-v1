@@ -1,0 +1,52 @@
+{
+  "decision": {
+    "citations": [
+      "PH-8.1"
+    ],
+    "payable_amount": 100,
+    "per_line": [
+      {
+        "claimed": 100,
+        "clause_id": "PH-8.1",
+        "code": "NDC-00001-0001",
+        "payable": 100
+      }
+    ],
+    "status": "APPROVE"
+  },
+  "description": "Generic drug, in formulary",
+  "domain": "pharmacy",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 100,
+    "currency": "INR",
+    "line_items": [
+      {
+        "amount": 100,
+        "code": "NDC-00001-0001",
+        "description": "Paracetamol 500mg (generic)",
+        "unit_price": 50,
+        "units": 2
+      }
+    ],
+    "member_id": "MEM2001",
+    "pharmacy_id": "PHM01",
+    "pharmacy_name": "Wellness Pharmacy",
+    "policy_no": "POL200001",
+    "procedure_codes": [
+      "NDC-00001-0001"
+    ],
+    "service_date": "2024-03-05"
+  },
+  "heal_attempts": 0,
+  "id": "PHR-001",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

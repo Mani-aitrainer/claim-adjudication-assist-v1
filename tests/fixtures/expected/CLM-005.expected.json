@@ -1,0 +1,58 @@
+{
+  "decision": {
+    "citations": [
+      "IP-2.1",
+      "IP-2.4"
+    ],
+    "payable_amount": 320000,
+    "per_line": [
+      {
+        "claimed": 400000,
+        "clause_id": "IP-2.1",
+        "code": "CPT-27447",
+        "payable": 320000
+      }
+    ],
+    "status": "PARTIAL"
+  },
+  "description": "Knee arthroplasty, member aged 64 \u2014 senior co-pay applies",
+  "domain": "claims",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 400000,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "M17.11"
+    ],
+    "line_items": [
+      {
+        "amount": 400000,
+        "code": "CPT-27447",
+        "description": "Total knee arthroplasty",
+        "units": 1
+      }
+    ],
+    "member_age": 64,
+    "member_id": "MEM1002",
+    "network_status": "in_network",
+    "policy_no": "POL100002",
+    "procedure_codes": [
+      "CPT-27447"
+    ],
+    "provider_id": "PRV02",
+    "provider_name": "Sunrise Hospital",
+    "service_end_date": "2024-05-14",
+    "service_start_date": "2024-05-12"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-005",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

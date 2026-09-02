@@ -1,0 +1,73 @@
+{
+  "decision": {
+    "citations": [
+      "OP-3.2",
+      "DG-4.1"
+    ],
+    "payable_amount": 2000,
+    "per_line": [
+      {
+        "claimed": 1200,
+        "clause_id": "OP-3.2",
+        "code": "CPT-99213",
+        "payable": 1200
+      },
+      {
+        "claimed": 800,
+        "clause_id": "DG-4.1",
+        "code": "CPT-71046",
+        "payable": 800
+      }
+    ],
+    "status": "APPROVE"
+  },
+  "description": "Line items don't sum to claimed total after OCR currency noise; repaired",
+  "domain": "claims",
+  "extraction_source": "fewshot_repair",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 2000,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "J18.9"
+    ],
+    "line_items": [
+      {
+        "amount": 1200,
+        "code": "CPT-99213",
+        "description": "Office visit, established patient",
+        "units": 1
+      },
+      {
+        "amount": 800,
+        "code": "CPT-71046",
+        "description": "Chest X-ray",
+        "units": 1
+      }
+    ],
+    "member_age": 34,
+    "member_id": "MEM1001",
+    "network_status": "in_network",
+    "policy_no": "POL100001",
+    "procedure_codes": [
+      "CPT-99213",
+      "CPT-71046"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-03-15",
+    "service_start_date": "2024-03-15"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-008",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "repair",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 1
+}

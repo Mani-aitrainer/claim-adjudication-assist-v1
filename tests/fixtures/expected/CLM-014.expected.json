@@ -1,0 +1,56 @@
+{
+  "decision": {
+    "citations": [],
+    "payable_amount": 0,
+    "per_line": [
+      {
+        "claimed": 1200,
+        "clause_id": null,
+        "code": "CPT-99213",
+        "payable": 0
+      }
+    ],
+    "status": "DENY"
+  },
+  "description": "Service date outside the policy validity period \u2014 genuinely ineligible, not an OCR problem",
+  "domain": "claims",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 1200,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "Z00.00"
+    ],
+    "line_items": [
+      {
+        "amount": 1200,
+        "code": "CPT-99213",
+        "description": "Office visit, established patient",
+        "units": 1
+      }
+    ],
+    "member_age": 45,
+    "member_id": "MEM1004",
+    "network_status": "in_network",
+    "policy_no": "POL100004",
+    "procedure_codes": [
+      "CPT-99213"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-02-10",
+    "service_start_date": "2024-02-10"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-014",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0,
+  "validation_failure_code": "POLICY_WINDOW"
+}

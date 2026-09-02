@@ -1,0 +1,82 @@
+# Synthetic members and policy periods referenced by member_id from manifest.yaml.
+
+members:
+  - member_id: MEM1001
+    name: "Asha Rao"
+    dob: "1990-06-14"
+    age: 34
+    policy_no: POL100001
+    policy_start: "2024-01-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM1002
+    name: "Vikram Nair"
+    dob: "1960-02-20"
+    age: 64
+    policy_no: POL100002
+    policy_start: "2023-01-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM1003
+    name: "Priya Menon"
+    dob: "1995-11-02"
+    age: 29
+    policy_no: POL100003
+    policy_start: "2023-07-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM1004
+    name: "Sanjay Iyer"
+    dob: "1979-09-09"
+    age: 45
+    policy_no: POL100004
+    policy_start: "2022-01-01"
+    policy_end: "2022-12-31"
+
+  - member_id: MEM2001
+    name: "Deepa Krishnan"
+    dob: "1988-03-17"
+    age: 36
+    policy_no: POL200001
+    policy_start: "2024-01-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM2002
+    name: "Rahul Verma"
+    dob: "1975-12-05"
+    age: 49
+    policy_no: POL200002
+    policy_start: "2024-01-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM2003
+    name: "Neha Joshi"
+    dob: "1992-08-23"
+    age: 32
+    policy_no: POL200003
+    policy_start: "2024-01-01"
+    policy_end: "2024-12-31"
+
+  - member_id: MEM2004
+    name: "Arjun Pillai"
+    dob: "1983-05-30"
+    age: 41
+    policy_no: POL200004
+    policy_start: "2024-01-01"
+    policy_end: "2024-12-31"
+
+providers:
+  - provider_id: PRV01
+    name: "CityCare Clinic"
+    network_status: in_network
+  - provider_id: PRV02
+    name: "Sunrise Hospital"
+    network_status: in_network
+  - provider_id: PRV99
+    name: "Metro Health Centre"
+    network_status: out_of_network
+
+pharmacies:
+  - pharmacy_id: PHM01
+    name: "Wellness Pharmacy"
+    network_status: in_network

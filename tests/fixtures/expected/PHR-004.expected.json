@@ -1,0 +1,68 @@
+{
+  "decision": {
+    "citations": [
+      "PH-8.1"
+    ],
+    "payable_amount": 310,
+    "per_line": [
+      {
+        "claimed": 150,
+        "clause_id": "PH-8.1",
+        "code": "NDC-00001-0001",
+        "payable": 150
+      },
+      {
+        "claimed": 160,
+        "clause_id": "PH-8.1",
+        "code": "NDC-00001-0002",
+        "payable": 160
+      }
+    ],
+    "status": "APPROVE"
+  },
+  "description": "qty x unit_price does not equal line total on the first line after OCR noise; repaired",
+  "domain": "pharmacy",
+  "extraction_source": "fewshot_repair",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 310,
+    "currency": "INR",
+    "line_items": [
+      {
+        "amount": 150,
+        "code": "NDC-00001-0001",
+        "description": "Paracetamol 500mg (generic)",
+        "unit_price": 50,
+        "units": 3
+      },
+      {
+        "amount": 160,
+        "code": "NDC-00001-0002",
+        "description": "Amoxicillin 250mg (generic)",
+        "unit_price": 80,
+        "units": 2
+      }
+    ],
+    "member_id": "MEM2004",
+    "pharmacy_id": "PHM01",
+    "pharmacy_name": "Wellness Pharmacy",
+    "policy_no": "POL200004",
+    "procedure_codes": [
+      "NDC-00001-0001",
+      "NDC-00001-0002"
+    ],
+    "service_date": "2024-03-08"
+  },
+  "heal_attempts": 0,
+  "id": "PHR-004",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "repair",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 1
+}

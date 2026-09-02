@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "InternalServerError",
+    "message": "Textract AnalyzeDocument failed for this document."
+  },
+  "meta": {
+    "scenario_id": "CLM-011",
+    "simulate_ocr_failure": true
+  }
+}

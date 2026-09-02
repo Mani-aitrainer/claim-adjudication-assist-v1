@@ -1,0 +1,53 @@
+# CPT / ICD-10 / NDC codes used across generated fixtures.
+# Small and deliberately chosen so each code lands on a different reasoning path.
+
+procedure_codes:
+  CPT-99213:
+    description: "Office visit, established patient"
+    routes_to: OP-3.2
+  CPT-71046:
+    description: "Chest X-ray"
+    routes_to: DG-4.1
+  CPT-27447:
+    description: "Total knee arthroplasty"
+    routes_to: IP-2.1
+  CPT-15823:
+    description: "Blepharoplasty"
+    routes_to: EX-7.1
+  CPT-59400:
+    description: "Obstetric care"
+    routes_to: MT-5.3
+  CPT-D2740:
+    description: "Dental crown"
+    routes_to: EX-7.4
+
+diagnosis_codes:
+  J18.9:
+    description: "Pneumonia, unspecified organism"
+  M17.11:
+    description: "Unilateral primary osteoarthritis, right knee"
+  Z34.00:
+    description: "Encounter for supervision of normal first pregnancy"
+  H02.831:
+    description: "Dermatochalasis of right upper eyelid"
+  Z00.00:
+    description: "Encounter for general adult medical examination"
+
+drug_codes:
+  NDC-00001-0001:
+    description: "Paracetamol 500mg (generic)"
+    formulary: true
+    generic: true
+  NDC-00001-0002:
+    description: "Amoxicillin 250mg (generic)"
+    formulary: true
+    generic: true
+  NDC-00002-0001:
+    description: "Crocin 500mg (branded, generic available)"
+    formulary: true
+    generic: false
+    generic_equivalent: NDC-00001-0001
+  NDC-00099-0001:
+    description: "ExperimentalDrugX 200mg"
+    formulary: false
+    generic: false

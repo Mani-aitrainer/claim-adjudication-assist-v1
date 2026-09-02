@@ -1,0 +1,497 @@
+# Scenario catalogue — single source of truth. testdata.generate reads this to build every
+# fixture; tests/e2e parametrises directly over it. Adding a scenario means adding one block
+# here — no test code changes.
+
+claims:
+  - id: CLM-001
+    domain: claims
+    description: "Clean office visit"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-05"
+    service_end_date: "2024-03-05"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: APPROVE
+        payable_amount: 1200
+        citations: [OP-3.2]
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 1200, clause_id: OP-3.2}
+
+  - id: CLM-002
+    domain: claims
+    description: "Office visit over the per-visit sub-limit"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-10"
+    service_end_date: "2024-03-10"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 2500}
+    claimed_amount: 2500
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: PARTIAL
+        payable_amount: 1500
+        citations: [OP-3.2]
+        per_line:
+          - {code: CPT-99213, claimed: 2500, payable: 1500, clause_id: OP-3.2}
+
+  - id: CLM-003
+    domain: claims
+    description: "Cosmetic blepharoplasty — excluded"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-04-01"
+    service_end_date: "2024-04-01"
+    diagnosis_codes: ["H02.831"]
+    line_items:
+      - {code: CPT-15823, description: "Blepharoplasty", units: 1, amount: 45000}
+    claimed_amount: 45000
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: DENY
+        payable_amount: 0
+        citations: [EX-7.1]
+        per_line:
+          - {code: CPT-15823, claimed: 45000, payable: 0, clause_id: EX-7.1}
+
+  - id: CLM-004
+    domain: claims
+    description: "Maternity claim — policy only 8 months old, waiting period not served"
+    member_id: MEM1003
+    provider_id: PRV02
+    service_start_date: "2024-03-01"
+    service_end_date: "2024-03-01"
+    diagnosis_codes: ["Z34.00"]
+    line_items:
+      - {code: CPT-59400, description: "Obstetric care", units: 1, amount: 15000}
+    claimed_amount: 15000
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: DENY
+        payable_amount: 0
+        citations: [MT-5.3]
+        per_line:
+          - {code: CPT-59400, claimed: 15000, payable: 0, clause_id: MT-5.3}
+
+  - id: CLM-005
+    domain: claims
+    description: "Knee arthroplasty, member aged 64 — senior co-pay applies"
+    member_id: MEM1002
+    provider_id: PRV02
+    service_start_date: "2024-05-12"
+    service_end_date: "2024-05-14"
+    diagnosis_codes: ["M17.11"]
+    line_items:
+      - {code: CPT-27447, description: "Total knee arthroplasty", units: 1, amount: 400000}
+    claimed_amount: 400000
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: PARTIAL
+        payable_amount: 320000
+        citations: [IP-2.1, IP-2.4]
+        per_line:
+          - {code: CPT-27447, claimed: 400000, payable: 320000, clause_id: IP-2.1}
+
+  - id: CLM-006
+    domain: claims
+    description: "Clean claim with recoverable OCR damage on member_id and service date"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-05"
+    service_end_date: "2024-03-05"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise:
+      member_id: char_confusion
+      service_start_date: date_reformat
+    expected:
+      node_path: [intake, validate, repair, validate, adjudicate, audit]
+      retry_count: 1
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: fewshot_repair
+      decision:
+        status: APPROVE
+        payable_amount: 1200
+        citations: [OP-3.2]
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 1200, clause_id: OP-3.2}
+
+  - id: CLM-007
+    domain: claims
+    description: "Unrecoverable OCR damage on member_id and policy number — falls back"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-06"
+    service_end_date: "2024-03-06"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise:
+      member_id: dropout
+      policy_no: dropout
+    expected:
+      node_path: [intake, validate, repair, validate, repair, validate, fallback, adjudicate, audit]
+      retry_count: 2
+      heal_attempts: 0
+      fallback_used: true
+      needs_human_review: true
+      extraction_source: heuristic_fallback
+      decision:
+        status: MANUAL_REVIEW
+        payable_amount: null
+        citations: []
+        per_line: []
+
+  - id: CLM-008
+    domain: claims
+    description: "Line items don't sum to claimed total after OCR currency noise; repaired"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-15"
+    service_end_date: "2024-03-15"
+    diagnosis_codes: ["J18.9"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+      - {code: CPT-71046, description: "Chest X-ray", units: 1, amount: 800}
+    claimed_amount: 2000
+    currency: INR
+    noise:
+      "line_items[1].amount": currency_noise
+    expected:
+      node_path: [intake, validate, repair, validate, adjudicate, audit]
+      retry_count: 1
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: fewshot_repair
+      decision:
+        status: APPROVE
+        payable_amount: 2000
+        citations: [OP-3.2, DG-4.1]
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 1200, clause_id: OP-3.2}
+          - {code: CPT-71046, claimed: 800, payable: 800, clause_id: DG-4.1}
+
+  - id: CLM-009
+    domain: claims
+    description: "Two lines: one covered outpatient visit, one excluded dental crown"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-20"
+    service_end_date: "2024-03-20"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+      - {code: CPT-D2740, description: "Dental crown", units: 1, amount: 5000}
+    claimed_amount: 6200
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: PARTIAL
+        payable_amount: 1200
+        citations: [OP-3.2, EX-7.4]
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 1200, clause_id: OP-3.2}
+          - {code: CPT-D2740, claimed: 5000, payable: 0, clause_id: EX-7.4}
+
+  - id: CLM-010
+    domain: claims
+    description: "Exact duplicate of CLM-001, same member and dates — memory should flag it"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-05"
+    service_end_date: "2024-03-05"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise: {}
+    duplicate_of: CLM-001
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: true
+      extraction_source: intake_llm
+      decision:
+        status: MANUAL_REVIEW
+        payable_amount: 1200
+        citations: [OP-3.2]
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 1200, clause_id: OP-3.2}
+
+  - id: CLM-011
+    domain: claims
+    description: "Textract raises a service error on intake"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-22"
+    service_end_date: "2024-03-22"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise: {}
+    simulate_ocr_failure: true
+    expected:
+      node_path: [intake, fallback, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: true
+      needs_human_review: true
+      extraction_source: heuristic_fallback
+      decision:
+        status: MANUAL_REVIEW
+        payable_amount: null
+        citations: []
+        per_line: []
+
+  - id: CLM-012
+    domain: claims
+    description: "Adjudicator's first decision cites a clause not in retrieved context — heals once"
+    member_id: MEM1001
+    provider_id: PRV01
+    service_start_date: "2024-03-25"
+    service_end_date: "2024-03-25"
+    diagnosis_codes: ["J18.9"]
+    line_items:
+      - {code: CPT-71046, description: "Chest X-ray", units: 1, amount: 5000}
+    claimed_amount: 5000
+    currency: INR
+    noise: {}
+    scripted_weak_first_decision: true
+    expected:
+      node_path: [intake, validate, adjudicate, audit, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 1
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: APPROVE
+        payable_amount: 5000
+        citations: [DG-4.1]
+        per_line:
+          - {code: CPT-71046, claimed: 5000, payable: 5000, clause_id: DG-4.1}
+
+  - id: CLM-013
+    domain: claims
+    description: "Out-of-network provider — 70% reimbursement"
+    member_id: MEM1001
+    provider_id: PRV99
+    service_start_date: "2024-04-05"
+    service_end_date: "2024-04-05"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1000}
+    claimed_amount: 1000
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: PARTIAL
+        payable_amount: 700
+        citations: [OP-3.2, NW-9.2]
+        per_line:
+          - {code: CPT-99213, claimed: 1000, payable: 700, clause_id: NW-9.2}
+
+  - id: CLM-014
+    domain: claims
+    description: "Service date outside the policy validity period — genuinely ineligible, not an OCR problem"
+    member_id: MEM1004
+    provider_id: PRV01
+    service_start_date: "2024-02-10"
+    service_end_date: "2024-02-10"
+    diagnosis_codes: ["Z00.00"]
+    line_items:
+      - {code: CPT-99213, description: "Office visit, established patient", units: 1, amount: 1200}
+    claimed_amount: 1200
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      validation_failure_code: POLICY_WINDOW
+      decision:
+        status: DENY
+        payable_amount: 0
+        citations: []
+        per_line:
+          - {code: CPT-99213, claimed: 1200, payable: 0, clause_id: null}
+
+pharmacy:
+  - id: PHR-001
+    domain: pharmacy
+    description: "Generic drug, in formulary"
+    member_id: MEM2001
+    pharmacy_id: PHM01
+    service_date: "2024-03-05"
+    line_items:
+      - {code: NDC-00001-0001, description: "Paracetamol 500mg (generic)", units: 2, unit_price: 50, amount: 100}
+    claimed_amount: 100
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: APPROVE
+        payable_amount: 100
+        citations: [PH-8.1]
+        per_line:
+          - {code: NDC-00001-0001, claimed: 100, payable: 100, clause_id: PH-8.1}
+
+  - id: PHR-002
+    domain: pharmacy
+    description: "Branded drug with a generic equivalent available"
+    member_id: MEM2002
+    pharmacy_id: PHM01
+    service_date: "2024-03-06"
+    line_items:
+      - {code: NDC-00002-0001, description: "Crocin 500mg (branded)", units: 2, unit_price: 100, amount: 200}
+    claimed_amount: 200
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: PARTIAL
+        payable_amount: 160
+        citations: [PH-8.1]
+        per_line:
+          - {code: NDC-00002-0001, claimed: 200, payable: 160, clause_id: PH-8.1}
+
+  - id: PHR-003
+    domain: pharmacy
+    description: "Non-formulary drug, no prior authorisation"
+    member_id: MEM2003
+    pharmacy_id: PHM01
+    service_date: "2024-03-07"
+    line_items:
+      - {code: NDC-00099-0001, description: "ExperimentalDrugX 200mg", units: 1, unit_price: 3000, amount: 3000}
+    claimed_amount: 3000
+    currency: INR
+    noise: {}
+    expected:
+      node_path: [intake, validate, adjudicate, audit]
+      retry_count: 0
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: intake_llm
+      decision:
+        status: DENY
+        payable_amount: 0
+        citations: [PH-8.5]
+        per_line:
+          - {code: NDC-00099-0001, claimed: 3000, payable: 0, clause_id: PH-8.5}
+
+  - id: PHR-004
+    domain: pharmacy
+    description: "qty x unit_price does not equal line total on the first line after OCR noise; repaired"
+    member_id: MEM2004
+    pharmacy_id: PHM01
+    service_date: "2024-03-08"
+    line_items:
+      - {code: NDC-00001-0001, description: "Paracetamol 500mg (generic)", units: 3, unit_price: 50, amount: 150}
+      - {code: NDC-00001-0002, description: "Amoxicillin 250mg (generic)", units: 2, unit_price: 80, amount: 160}
+    claimed_amount: 310
+    currency: INR
+    noise:
+      "line_items[0].amount": currency_noise
+    expected:
+      node_path: [intake, validate, repair, validate, adjudicate, audit]
+      retry_count: 1
+      heal_attempts: 0
+      fallback_used: false
+      needs_human_review: false
+      extraction_source: fewshot_repair
+      decision:
+        status: APPROVE
+        payable_amount: 310
+        citations: [PH-8.1]
+        per_line:
+          - {code: NDC-00001-0001, claimed: 150, payable: 150, clause_id: PH-8.1}
+          - {code: NDC-00001-0002, claimed: 160, payable: 160, clause_id: PH-8.1}

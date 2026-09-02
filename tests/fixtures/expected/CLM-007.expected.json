@@ -1,0 +1,53 @@
+{
+  "decision": {
+    "citations": [],
+    "payable_amount": null,
+    "per_line": [],
+    "status": "MANUAL_REVIEW"
+  },
+  "description": "Unrecoverable OCR damage on member_id and policy number \u2014 falls back",
+  "domain": "claims",
+  "extraction_source": "heuristic_fallback",
+  "fallback_used": true,
+  "ground_truth": {
+    "claimed_amount": 1200,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "Z00.00"
+    ],
+    "line_items": [
+      {
+        "amount": 1200,
+        "code": "CPT-99213",
+        "description": "Office visit, established patient",
+        "units": 1
+      }
+    ],
+    "member_age": 34,
+    "member_id": "MEM1001",
+    "network_status": "in_network",
+    "policy_no": "POL100001",
+    "procedure_codes": [
+      "CPT-99213"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-03-06",
+    "service_start_date": "2024-03-06"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-007",
+  "needs_human_review": true,
+  "node_path": [
+    "intake",
+    "validate",
+    "repair",
+    "validate",
+    "repair",
+    "validate",
+    "fallback",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 2
+}

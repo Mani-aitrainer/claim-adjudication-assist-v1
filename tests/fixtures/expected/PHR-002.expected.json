@@ -1,0 +1,52 @@
+{
+  "decision": {
+    "citations": [
+      "PH-8.1"
+    ],
+    "payable_amount": 160,
+    "per_line": [
+      {
+        "claimed": 200,
+        "clause_id": "PH-8.1",
+        "code": "NDC-00002-0001",
+        "payable": 160
+      }
+    ],
+    "status": "PARTIAL"
+  },
+  "description": "Branded drug with a generic equivalent available",
+  "domain": "pharmacy",
+  "extraction_source": "intake_llm",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 200,
+    "currency": "INR",
+    "line_items": [
+      {
+        "amount": 200,
+        "code": "NDC-00002-0001",
+        "description": "Crocin 500mg (branded)",
+        "unit_price": 100,
+        "units": 2
+      }
+    ],
+    "member_id": "MEM2002",
+    "pharmacy_id": "PHM01",
+    "pharmacy_name": "Wellness Pharmacy",
+    "policy_no": "POL200002",
+    "procedure_codes": [
+      "NDC-00002-0001"
+    ],
+    "service_date": "2024-03-06"
+  },
+  "heal_attempts": 0,
+  "id": "PHR-002",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 0
+}

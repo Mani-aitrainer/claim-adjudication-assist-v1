@@ -1,0 +1,15 @@
+# Textract KEY label aliases -> canonical ClaimRecord field names. Used as a hint list for
+# ClaimIntakeAgent's zero-shot mapping call — the LLM sees this alongside the raw key/value
+# pairs so it knows which canonical name each printed label should become.
+
+member_id: ["Member ID"]
+policy_no: ["Policy Number"]
+member_age: ["Member Age"]
+provider_id: ["Provider ID"]
+provider_name: ["Provider Name"]
+network_status: ["Network Status"]
+service_start_date: ["Service Start Date"]
+service_end_date: ["Service End Date"]
+diagnosis_codes: ["Diagnosis Codes"]
+claimed_amount: ["Total Charged", "Invoice Total"]
+currency: ["Currency"]

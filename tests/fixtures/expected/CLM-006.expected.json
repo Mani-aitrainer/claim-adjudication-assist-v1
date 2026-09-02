@@ -1,0 +1,59 @@
+{
+  "decision": {
+    "citations": [
+      "OP-3.2"
+    ],
+    "payable_amount": 1200,
+    "per_line": [
+      {
+        "claimed": 1200,
+        "clause_id": "OP-3.2",
+        "code": "CPT-99213",
+        "payable": 1200
+      }
+    ],
+    "status": "APPROVE"
+  },
+  "description": "Clean claim with recoverable OCR damage on member_id and service date",
+  "domain": "claims",
+  "extraction_source": "fewshot_repair",
+  "fallback_used": false,
+  "ground_truth": {
+    "claimed_amount": 1200,
+    "currency": "INR",
+    "diagnosis_codes": [
+      "Z00.00"
+    ],
+    "line_items": [
+      {
+        "amount": 1200,
+        "code": "CPT-99213",
+        "description": "Office visit, established patient",
+        "units": 1
+      }
+    ],
+    "member_age": 34,
+    "member_id": "MEM1001",
+    "network_status": "in_network",
+    "policy_no": "POL100001",
+    "procedure_codes": [
+      "CPT-99213"
+    ],
+    "provider_id": "PRV01",
+    "provider_name": "CityCare Clinic",
+    "service_end_date": "2024-03-05",
+    "service_start_date": "2024-03-05"
+  },
+  "heal_attempts": 0,
+  "id": "CLM-006",
+  "needs_human_review": false,
+  "node_path": [
+    "intake",
+    "validate",
+    "repair",
+    "validate",
+    "adjudicate",
+    "audit"
+  ],
+  "retry_count": 1
+}
