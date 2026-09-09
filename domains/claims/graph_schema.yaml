@@ -1,0 +1,22 @@
+# Node & edge types for the policy knowledge graph (GraphRAG With Networkx).
+# Every edge carries a clause_id — that's what makes citations verifiable.
+
+node_types:
+  - Policy
+  - Member
+  - Benefit
+  - Exclusion
+  - ProcedureCode
+  - DiagnosisCode
+  - WaitingPeriod
+  - SubLimit
+  - Provider
+
+edge_types:
+  - covers            # ProcedureCode -> Benefit
+  - excludes           # ProcedureCode -> Exclusion
+  - has_sublimit        # Benefit -> SubLimit
+  - requires_waiting     # Benefit -> WaitingPeriod
+  - maps_to            # ProcedureCode -> Benefit (annexure mapping)
+  - applies_to          # SubLimit/WaitingPeriod -> Benefit
+  - network_status      # Provider -> Policy
