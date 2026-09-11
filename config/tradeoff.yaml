@@ -1,0 +1,15 @@
+context:
+  max_context_tokens: 4000
+  graph_share: 0.5            # half the budget to graph triples, half to vector chunks
+  min_vector_chunks: 2
+history:
+  strategy: window_plus_summary
+  window_turns: 4             # last 4 messages verbatim
+  summary_after_turns: 6      # older ones -> rolling summary
+  max_history_tokens: 1500
+memory:
+  enabled: true
+  top_k: 3
+  scope: ["member_id", "policy_no"]
+  ttl_days: 90
+  write_policy: on_final_decision_only
