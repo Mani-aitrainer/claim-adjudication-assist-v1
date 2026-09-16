@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CLA: run CLM-001.pdf",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.cli",
+            // The claim document CLA runs through the intake -> validate (-> repair -> fallback) graph.
+            "args": ["run", "tests/fixtures/claims/CLM-001.pdf"],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "CLA: run CLM-002.pdf",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.cli",
+            // The claim document CLA runs through the intake -> validate (-> repair -> fallback) graph.
+            "args": ["run", "tests/fixtures/claims/CLM-002.pdf"],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}
