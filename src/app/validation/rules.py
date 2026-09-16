@@ -44,6 +44,22 @@ def _parse_date(value: str) -> date | None:
         return None
 
 
+def _to_amount(value: Any) -> float | None:
+    """Coerces an extracted amount to a float. LLM extraction occasionally emits amounts
+    as strings (e.g. "125.00"); returns None for anything that isn't a valid number so the
+    caller can raise AMOUNT_FORMAT instead of crashing."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def validate_claim(record: dict[str, Any]) -> ValidationResult:
     """Validates a claims-domain extracted-fields dict. Returns every failing rule, not just
     the first — the repair agent (P4) needs the full list to know what to fix."""
@@ -89,18 +105,27 @@ def validate_claim(record: dict[str, Any]) -> ValidationResult:
         msg = "service dates are not valid ISO dates"
         errors.append(_issue("service_start_date", "DATE_SANITY", msg))
 
-    claimed_amount = record.get("claimed_amount")
-    if claimed_amount is not None and claimed_amount <= 0:
+    raw_claimed_amount = record.get("claimed_amount")
+    claimed_amount = _to_amount(raw_claimed_amount)
+    if raw_claimed_amount is not None and claimed_amount is None:
+        msg = f"claimed_amount '{raw_claimed_amount}' is not a valid number"
+        errors.append(_issue("claimed_amount", "AMOUNT_FORMAT", msg))
+    elif claimed_amount is not None and claimed_amount <= 0:
         msg = "claimed_amount must be greater than zero"
         errors.append(_issue("claimed_amount", "AMOUNT_POSITIVE", msg))
 
     line_items = record.get("line_items") or []
     if claimed_amount is not None and line_items:
-        tolerance = config["amount_balance"]["tolerance"]
-        line_total = sum(item["amount"] for item in line_items)
-        if abs(line_total - claimed_amount) > tolerance:
-            msg = f"claimed_amount {claimed_amount} does not match line item sum {line_total}"
-            errors.append(_issue("claimed_amount", "AMOUNT_BALANCE", msg))
+        line_amounts = [_to_amount(item.get("amount")) for item in line_items]
+        if any(amount is None for amount in line_amounts):
+            msg = "one or more line item amounts are not valid numbers"
+            errors.append(_issue("line_items", "AMOUNT_FORMAT", msg))
+        else:
+            tolerance = config["amount_balance"]["tolerance"]
+            line_total = sum(line_amounts)
+            if abs(line_total - claimed_amount) > tolerance:
+                msg = f"claimed_amount {claimed_amount} does not match line item sum {line_total}"
+                errors.append(_issue("claimed_amount", "AMOUNT_BALANCE", msg))
 
     policy_no = record.get("policy_no") or ""
     policy_period = config["policy_periods"].get(policy_no)
