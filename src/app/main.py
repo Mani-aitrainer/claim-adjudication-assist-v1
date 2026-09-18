@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.routes_adjudicate import router as adjudicate_router
@@ -87,6 +88,12 @@ def create_app(settings: Settings | None = None, **build_graph_overrides: Any) -
             yield
 
     app = FastAPI(title="Claim Adjudication Assist", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(health_router)
     app.include_router(adjudicate_router)
     app.include_router(runs_router)

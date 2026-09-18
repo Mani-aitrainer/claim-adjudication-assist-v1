@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claim Adjudication Assist</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #171e2e;
+    --panel-2: #1f2838;
+    --border: #2a3448;
+    --text: #e6ebf5;
+    --muted: #8a94a8;
+    --accent: #4f8cff;
+    --ok: #35c98f;
+    --warn: #f2b84b;
+    --err: #ef5a6f;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  header .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .config {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .config input {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    width: 220px;
+  }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    gap: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 0 0 14px 0;
+  }
+  form.upload {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .mode-toggle {
+    display: flex;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .mode-toggle button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: white;
+  }
+  input[type="file"], input[type="text"].path-input {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    flex: 1;
+    min-width: 240px;
+  }
+  button.primary {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button.primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .pipeline {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .step {
+    flex: 1;
+    min-width: 110px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+    position: relative;
+  }
+  .step .name {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+  .step .latency {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    min-height: 14px;
+  }
+  .step[data-state="running"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .step[data-state="running"] .name { color: var(--accent); }
+  .step[data-state="done"] { border-color: var(--ok); }
+  .step[data-state="done"] .name { color: var(--ok); }
+  .step[data-state="error"] { border-color: var(--err); }
+  .step[data-state="error"] .name { color: var(--err); }
+  .step .count {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 999px;
+    display: none;
+  }
+  .step[data-attempts]:not([data-attempts="1"]) .count { display: inline-block; }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .timeline .entry {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12.5px;
+  }
+  .timeline .entry .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    justify-self: center;
+  }
+  .timeline .entry[data-state="running"] .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(79,140,255,0.18); }
+  .timeline .entry[data-state="done"] .dot { background: var(--ok); }
+  .timeline .entry[data-state="error"] .dot { background: var(--err); }
+  .timeline .entry .label { text-transform: capitalize; }
+  .timeline .entry .label .attempt { color: var(--muted); font-weight: 400; text-transform: none; }
+  .timeline .entry .meta { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+
+  .trace {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 60px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .trace .attempt-block + .attempt-block { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+  .trace .attempt-label {
+    display: block;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .trace .attempt-text { white-space: pre-wrap; word-break: break-word; }
+
+  .entries-list { display: flex; flex-direction: column; gap: 10px; }
+  .entries-list .entry-item { }
+  .entries-list .entry-item .entry-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .cursor {
+    display: inline-block;
+    width: 7px;
+    background: var(--accent);
+    animation: blink 1s steps(1) infinite;
+    margin-left: 1px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  pre.json {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .badge.approved, .badge.ok { background: rgba(53,201,143,0.15); color: var(--ok); }
+  .badge.denied, .badge.error { background: rgba(239,90,111,0.15); color: var(--err); }
+  .badge.review, .badge.pending, .badge.unknown { background: rgba(242,184,75,0.15); color: var(--warn); }
+
+  .log {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .log .line { color: var(--muted); padding: 2px 0; }
+  .log .line .ev { color: var(--accent); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 260px; }
+
+  .empty { color: var(--muted); font-size: 12px; }
+  .error-banner {
+    background: rgba(239,90,111,0.1);
+    border: 1px solid var(--err);
+    color: var(--err);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Claim Adjudication Assist</h1>
+    <div class="sub">Streaming UI over POST /v1/claims/adjudicate</div>
+  </div>
+  <div class="config">
+    <label for="apiBase" class="empty">API base</label>
+    <input type="text" id="apiBase" value="http://localhost:8000" />
+  </div>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>Submit a claim</h2>
+    <div class="mode-toggle" id="modeToggle">
+      <button type="button" class="active" data-mode="file">Upload file</button>
+      <button type="button" data-mode="path">Server path</button>
+    </div>
+    <form class="upload" id="uploadForm" style="margin-top:12px;">
+      <input type="file" id="fileInput" accept="application/pdf,image/*" />
+      <input type="text" id="pathInput" class="path-input" placeholder="tests/fixtures/claims/CLM-001.pdf" style="display:none;" />
+      <button type="submit" class="primary" id="submitBtn">Adjudicate</button>
+      <button type="button" class="secondary" id="cancelBtn" style="display:none;">Cancel</button>
+    </form>
+    <div class="error-banner" id="errorBanner"></div>
+  </section>
+
+  <section class="card">
+    <h2>Pipeline</h2>
+    <div class="pipeline" id="pipeline">
+      <div class="step" data-node="intake"><span class="count"></span><div class="name">intake</div><div class="latency"></div></div>
+      <div class="step" data-node="validate"><span class="count"></span><div class="name">validate</div><div class="latency"></div></div>
+      <div class="step" data-node="repair"><span class="count"></span><div class="name">repair</div><div class="latency"></div></div>
+      <div class="step" data-node="fallback"><span class="count"></span><div class="name">fallback</div><div class="latency"></div></div>
+      <div class="step" data-node="adjudicate"><span class="count"></span><div class="name">adjudicate</div><div class="latency"></div></div>
+      <div class="step" data-node="audit"><span class="count"></span><div class="name">audit</div><div class="latency"></div></div>
+    </div>
+    <div class="empty" style="margin-top:6px;">A number badge appears on a step that ran more than once (e.g. a repair or heal-retry loop).</div>
+  </section>
+
+  <section class="card">
+    <h2>Execution timeline</h2>
+    <div class="timeline" id="timeline"><div class="empty">No run yet.</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Adjudicator reasoning (streamed)</h2>
+    <div class="trace" id="trace"><span class="empty">Waiting for the adjudicate step to stream its reasoning trace…</span></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div>
+        <h2>Validation</h2>
+        <div class="entries-list" id="validationOut"><span class="empty">—</span></div>
+      </div>
+      <div>
+        <h2>Repair / healing</h2>
+        <div class="entries-list" id="repairOut"><span class="empty">—</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decision <span id="decisionBadge"></span></h2>
+    <pre class="json" id="decisionOut" style="max-height:420px; overflow-y:auto;"><span class="empty">Run a claim to see the final decision.</span></pre>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Raw event log</summary>
+      <div class="log" id="rawLog" style="margin-top:10px;"></div>
+    </details>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var els = {
+    apiBase: document.getElementById("apiBase"),
+    modeToggle: document.getElementById("modeToggle"),
+    form: document.getElementById("uploadForm"),
+    fileInput: document.getElementById("fileInput"),
+    pathInput: document.getElementById("pathInput"),
+    submitBtn: document.getElementById("submitBtn"),
+    cancelBtn: document.getElementById("cancelBtn"),
+    errorBanner: document.getElementById("errorBanner"),
+    pipeline: document.getElementById("pipeline"),
+    timeline: document.getElementById("timeline"),
+    trace: document.getElementById("trace"),
+    validationOut: document.getElementById("validationOut"),
+    repairOut: document.getElementById("repairOut"),
+    decisionOut: document.getElementById("decisionOut"),
+    decisionBadge: document.getElementById("decisionBadge"),
+    rawLog: document.getElementById("rawLog"),
+  };
+
+  var mode = "file";
+  var abortController = null;
+  var attemptCounts = {};       // node name -> number of times it has started
+  var openTimelineEntries = {}; // node name -> most recent "running" timeline element
+  var adjudicateAttempt = 0;
+  var currentTraceTextEl = null;
+
+  els.modeToggle.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    mode = btn.getAttribute("data-mode");
+    Array.prototype.forEach.call(els.modeToggle.querySelectorAll("button"), function (b) {
+      b.classList.toggle("active", b === btn);
+    });
+    els.fileInput.style.display = mode === "file" ? "" : "none";
+    els.pathInput.style.display = mode === "path" ? "" : "none";
+  });
+
+  function resetUI() {
+    els.errorBanner.style.display = "none";
+    els.errorBanner.textContent = "";
+    Array.prototype.forEach.call(els.pipeline.querySelectorAll(".step"), function (step) {
+      step.removeAttribute("data-state");
+      step.removeAttribute("data-attempts");
+      step.querySelector(".latency").textContent = "";
+      step.querySelector(".count").textContent = "";
+    });
+    els.timeline.innerHTML = "";
+    els.trace.innerHTML = '<span class="empty">Waiting for the adjudicate step to stream its reasoning trace…</span>';
+    els.validationOut.innerHTML = "<span class=\"empty\">—</span>";
+    els.repairOut.innerHTML = "<span class=\"empty\">—</span>";
+    els.decisionOut.innerHTML = "<span class=\"empty\">Running…</span>";
+    els.decisionBadge.textContent = "";
+    els.decisionBadge.className = "";
+    els.rawLog.innerHTML = "";
+    attemptCounts = {};
+    openTimelineEntries = {};
+    adjudicateAttempt = 0;
+    currentTraceTextEl = null;
+  }
+
+  function logLine(eventName, data) {
+    var div = document.createElement("div");
+    div.className = "line";
+    var text = typeof data === "string" ? data : JSON.stringify(data);
+    div.innerHTML = '<span class="ev">' + escapeHtml(eventName) + "</span> " + escapeHtml(text);
+    els.rawLog.appendChild(div);
+    els.rawLog.scrollTop = els.rawLog.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function setStepState(node, state, latencyMs) {
+    var step = els.pipeline.querySelector('.step[data-node="' + node + '"]');
+    if (!step) return;
+    step.setAttribute("data-state", state);
+    if (state === "running") {
+      attemptCounts[node] = (attemptCounts[node] || 0) + 1;
+      step.setAttribute("data-attempts", String(attemptCounts[node]));
+      step.querySelector(".count").textContent = "×" + attemptCounts[node];
+    }
+    if (typeof latencyMs === "number") {
+      step.querySelector(".latency").textContent = Math.round(latencyMs) + " ms";
+    }
+  }
+
+  // The graph loops (validate -> repair -> validate, adjudicate -> audit -> adjudicate on a
+  // heal retry), so a flat "did this node run" view isn't enough — this timeline renders one
+  // row per actual execution, in order, so a loop is visible instead of silently overwritten.
+  function timelineStart(node) {
+    var entry = document.createElement("div");
+    entry.className = "entry";
+    entry.setAttribute("data-state", "running");
+    var attempt = attemptCounts[node] || 1;
+    var attemptLabel = attempt > 1 ? ' <span class="attempt">(attempt ' + attempt + ")</span>" : "";
+    entry.innerHTML =
+      '<span class="dot"></span><span class="label">' + escapeHtml(node) + attemptLabel +
+      '</span><span class="meta">running…</span>';
+    els.timeline.appendChild(entry);
+    els.timeline.scrollTop = els.timeline.scrollHeight;
+    openTimelineEntries[node] = entry;
+    return entry;
+  }
+
+  function timelineEnd(node, latencyMs, state) {
+    var entry = openTimelineEntries[node];
+    if (!entry) entry = timelineStart(node);
+    entry.setAttribute("data-state", state || "done");
+    var meta = entry.querySelector(".meta");
+    meta.textContent = typeof latencyMs === "number" ? Math.round(latencyMs) + " ms" : (state === "error" ? "error" : "done");
+    delete openTimelineEntries[node];
+  }
+
+  function setJson(el, value) {
+    el.textContent = JSON.stringify(value, null, 2);
+  }
+
+  function appendEntry(container, title, value) {
+    if (container.querySelector(".empty")) container.innerHTML = "";
+    var item = document.createElement("div");
+    item.className = "entry-item";
+    var pre = document.createElement("pre");
+    pre.className = "json";
+    pre.textContent = JSON.stringify(value, null, 2);
+    item.innerHTML = '<div class="entry-title">' + escapeHtml(title) + "</div>";
+    item.appendChild(pre);
+    container.appendChild(item);
+  }
+
+  function startTraceAttempt() {
+    if (els.trace.querySelector(".empty")) els.trace.innerHTML = "";
+    adjudicateAttempt += 1;
+    var block = document.createElement("div");
+    block.className = "attempt-block";
+    var label = document.createElement("span");
+    label.className = "attempt-label";
+    label.textContent = "Attempt " + adjudicateAttempt;
+    var text = document.createElement("span");
+    text.className = "attempt-text";
+    block.appendChild(label);
+    block.appendChild(text);
+    els.trace.appendChild(block);
+    currentTraceTextEl = text;
+  }
+
+  function appendTraceDelta(delta) {
+    if (!currentTraceTextEl) startTraceAttempt();
+    currentTraceTextEl.textContent += delta;
+    els.trace.scrollTop = els.trace.scrollHeight;
+  }
+
+  function badgeClassFor(status) {
+    var s = (status || "").toLowerCase();
+    if (s === "approved" || s === "ok") return "approved";
+    if (s === "denied" || s === "error") return "denied";
+    return "review";
+  }
+
+  // ---- SSE parsing over a streamed fetch POST body ----
+  // EventSource only supports GET, and this API streams SSE on a POST, so we read the
+  // response body as chunks and parse the "event: X\ndata: Y\n\n" framing ourselves.
+  function parseSseBlock(block) {
+    var eventName = "message";
+    var dataLines = [];
+    block.split(/\r?\n/).forEach(function (line) {
+      if (!line || line.charAt(0) === ":") return; // comment/keepalive
+      var idx = line.indexOf(":");
+      var field = idx === -1 ? line : line.slice(0, idx);
+      var value = idx === -1 ? "" : line.slice(idx + 1).replace(/^ /, "");
+      if (field === "event") eventName = value;
+      else if (field === "data") dataLines.push(value);
+    });
+    return { event: eventName, data: dataLines.join("\n") };
+  }
+
+  // sse-starlette frames events with CRLF ("...\r\n\r\n"), not bare "\n\n" — indexOf("\n\n")
+  // never matches inside "\r\n\r\n" since a \r always sits between the two \n's, so a literal
+  // search silently finds zero blocks forever. Match either framing.
+  var BLOCK_SEP = /\r\n\r\n|\n\n|\r\r/;
+
+  function nextBlock(buffer) {
+    var match = buffer.match(BLOCK_SEP);
+    if (!match) return null;
+    return { block: buffer.slice(0, match.index), rest: buffer.slice(match.index + match[0].length) };
+  }
+
+  async function pumpSse(response) {
+    if (!response.ok || !response.body) {
+      var bodyText = "";
+      try { bodyText = await response.text(); } catch (_) {}
+      throw new Error("HTTP " + response.status + (bodyText ? ": " + bodyText : ""));
+    }
+
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = "";
+
+    while (true) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+
+      var split;
+      while ((split = nextBlock(buffer)) !== null) {
+        buffer = split.rest;
+        if (!split.block.trim()) continue;
+        var parsed = parseSseBlock(split.block);
+        handleEvent(parsed.event, parsed.data);
+      }
+    }
+  }
+
+  async function streamAdjudicate(url, formData, signal) {
+    var response = await fetch(url, { method: "POST", body: formData, signal: signal });
+    await pumpSse(response);
+  }
+
+  function handleEvent(eventName, rawData) {
+    var data = {};
+    try { data = rawData ? JSON.parse(rawData) : {}; } catch (_) { data = { raw: rawData }; }
+    logLine(eventName, data);
+
+    switch (eventName) {
+      case "node_start":
+        setStepState(data.agent, "running");
+        timelineStart(data.agent);
+        if (data.agent === "adjudicate") startTraceAttempt();
+        break;
+      case "node_end":
+        setStepState(data.agent, "done", data.latency_ms);
+        timelineEnd(data.agent, data.latency_ms, "done");
+        break;
+      case "validation":
+        appendEntry(els.validationOut, data.is_valid ? "valid" : "invalid", data);
+        break;
+      case "repair":
+        appendEntry(els.repairOut, "repair attempt " + data.attempt, data);
+        break;
+      case "healing":
+        appendEntry(els.repairOut, "heal attempt " + data.attempt + " (quality " + data.quality_score + ")", data);
+        break;
+      case "token":
+        appendTraceDelta(data.delta || "");
+        break;
+      case "final":
+        setJson(els.decisionOut, data.decision || data);
+        var status = (data.decision && data.decision.status) || "UNKNOWN";
+        els.decisionBadge.textContent = status;
+        els.decisionBadge.className = "badge " + badgeClassFor(status);
+        break;
+      case "error":
+        showError(data.message || "The run failed.");
+        var runningStep = els.pipeline.querySelector('.step[data-state="running"]');
+        if (runningStep) runningStep.setAttribute("data-state", "error");
+        Object.keys(openTimelineEntries).forEach(function (node) {
+          timelineEnd(node, undefined, "error");
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  function showError(message) {
+    els.errorBanner.textContent = message;
+    els.errorBanner.style.display = "block";
+  }
+
+  function setRunning(isRunning) {
+    els.submitBtn.disabled = isRunning;
+    els.cancelBtn.style.display = isRunning ? "" : "none";
+  }
+
+  els.form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    resetUI();
+
+    var base = els.apiBase.value.replace(/\/+$/, "");
+    var url = base + "/v1/claims/adjudicate";
+
+    var formData;
+    var fetchTarget = url;
+
+    if (mode === "file") {
+      var file = els.fileInput.files[0];
+      if (!file) { showError("Choose a file to upload first."); return; }
+      formData = new FormData();
+      formData.append("file", file);
+    } else {
+      var path = els.pathInput.value.trim();
+      if (!path) { showError("Enter a server-side path first."); return; }
+      // The API accepts JSON {"path": ...} too, but that requires a non-multipart POST;
+      // fetch a JSON body directly for this mode instead of FormData.
+      setRunning(true);
+      abortController = new AbortController();
+      try {
+        await streamAdjudicateJson(fetchTarget, { path: path }, abortController.signal);
+      } catch (err) {
+        if (err.name !== "AbortError") showError(err.message || String(err));
+      } finally {
+        setRunning(false);
+        abortController = null;
+      }
+      return;
+    }
+
+    setRunning(true);
+    abortController = new AbortController();
+    try {
+      await streamAdjudicate(fetchTarget, formData, abortController.signal);
+    } catch (err) {
+      if (err.name !== "AbortError") showError(err.message || String(err));
+    } finally {
+      setRunning(false);
+      abortController = null;
+    }
+  });
+
+  async function streamAdjudicateJson(url, jsonBody, signal) {
+    var response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(jsonBody),
+      signal: signal,
+    });
+    await pumpSse(response);
+  }
+
+  els.cancelBtn.addEventListener("click", function () {
+    if (abortController) abortController.abort();
+  });
+})();
+</script>
+
+</body>
+</html>
