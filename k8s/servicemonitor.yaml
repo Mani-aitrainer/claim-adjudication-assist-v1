@@ -1,0 +1,19 @@
+# Scraped by kube-prometheus-stack (installed via Helm — Runbook step 7).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: claim-adjudication
+  namespace: claim-adjudication
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: claim-adjudication
+  namespaceSelector:
+    matchNames:
+      - claim-adjudication
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

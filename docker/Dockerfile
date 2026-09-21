@@ -53,7 +53,6 @@ COPY --from=builder /install /usr/local
 COPY src/ ./src/
 COPY config/ ./config/
 COPY domains/ ./domains/
-COPY tests/fixtures/ ./tests/fixtures/
 COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \

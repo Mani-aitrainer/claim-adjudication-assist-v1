@@ -1,0 +1,73 @@
+# Image tag is set by the deploy workflow (`kubectl set image` or a kustomize overlay) —
+# the placeholder below is never applied literally.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claim-adjudication
+  namespace: claim-adjudication
+  labels:
+    app: claim-adjudication
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: claim-adjudication
+  template:
+    metadata:
+      labels:
+        app: claim-adjudication
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: claim-adjudication
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: app
+          image: __ECR_REPOSITORY_URL__:__IMAGE_TAG__
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: claim-adjudication-config
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # gives in-flight SSE streams a moment to drain before SIGTERM
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

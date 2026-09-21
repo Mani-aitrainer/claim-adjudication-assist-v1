@@ -1,0 +1,89 @@
+{
+  "title": "Claim Adjudication Assist",
+  "uid": "claim-adjudication-assist",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    { "id": 100, "type": "row", "title": "Throughput and Outcomes", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 1, "type": "timeseries", "title": "Runs per minute",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "targets": [{ "expr": "sum(rate(graph_runs_total[1m])) * 60", "legendFormat": "runs/min" }]
+    },
+    {
+      "id": 2, "type": "piechart", "title": "Decision mix",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "targets": [{ "expr": "sum by (outcome) (graph_runs_total)", "legendFormat": "{{outcome}}" }]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Agent error rate",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum by (agent) (rate(agent_invocations_total{status=\"error\"}[5m])) / sum by (agent) (rate(agent_invocations_total[5m]))",
+          "legendFormat": "{{agent}}"
+        }
+      ]
+    },
+
+    { "id": 200, "type": "row", "title": "Latency", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 } },
+    {
+      "id": 4, "type": "timeseries", "title": "Agent latency p50/p95/p99",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, agent) (rate(agent_latency_seconds_bucket[5m])))", "legendFormat": "p50 {{agent}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, agent) (rate(agent_latency_seconds_bucket[5m])))", "legendFormat": "p95 {{agent}}" },
+        { "expr": "histogram_quantile(0.99, sum by (le, agent) (rate(agent_latency_seconds_bucket[5m])))", "legendFormat": "p99 {{agent}}" }
+      ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "End-to-end run duration",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, domain) (rate(graph_run_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{domain}}" }
+      ]
+    },
+
+    { "id": 300, "type": "row", "title": "Tokens and Cost", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 } },
+    {
+      "id": 6, "type": "timeseries", "title": "Cost per agent",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "targets": [{ "expr": "sum by (agent) (rate(agent_cost_usd_total[5m]))", "legendFormat": "{{agent}}" }]
+    },
+    {
+      "id": 7, "type": "stat", "title": "Cost per run (avg)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "targets": [{ "expr": "sum(rate(agent_cost_usd_total[5m])) / sum(rate(graph_runs_total[5m]))" }]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Input/output token split",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "targets": [
+        { "expr": "sum by (token_type) (rate(agent_tokens_total[5m]))", "legendFormat": "{{token_type}}" }
+      ]
+    },
+
+    { "id": 400, "type": "row", "title": "Quality and Loops", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 } },
+    {
+      "id": 9, "type": "timeseries", "title": "Validation failures by rule",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 28 },
+      "targets": [{ "expr": "sum by (rule) (rate(validation_failures_total[5m]))", "legendFormat": "{{rule}}" }]
+    },
+    {
+      "id": 10, "type": "piechart", "title": "Repair attempt outcomes",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 28 },
+      "targets": [{ "expr": "sum by (outcome) (repair_attempts_total)", "legendFormat": "{{outcome}}" }]
+    },
+    {
+      "id": 11, "type": "piechart", "title": "Healing loop outcomes",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 28 },
+      "targets": [{ "expr": "sum by (outcome) (healing_loops_total)", "legendFormat": "{{outcome}}" }]
+    },
+    {
+      "id": 12, "type": "histogram", "title": "Quality score distribution",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 28 },
+      "targets": [{ "expr": "sum by (le) (rate(quality_score_bucket[15m]))" }]
+    }
+  ]
+}

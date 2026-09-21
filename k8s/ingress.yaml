@@ -1,0 +1,25 @@
+# Internet-facing ALB via the AWS Load Balancer Controller (installed by Helm — see
+# Runbook step 7). SSE needs a long idle timeout; the ALB's default 60s idle timeout is
+# why routes_adjudicate.py emits a `: keepalive` comment every 15s.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: claim-adjudication
+  namespace: claim-adjudication
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: claim-adjudication
+                port:
+                  number: 80

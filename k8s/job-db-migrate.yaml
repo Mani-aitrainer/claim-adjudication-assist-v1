@@ -1,0 +1,27 @@
+# Runs SQL migrations + checkpointer.setup() once against RDS — never on every pod
+# start. Must complete before the Deployment rolls (Runbook step 9).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: claim-adjudication
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: claim-adjudication
+      restartPolicy: Never
+      containers:
+        - name: db-migrate
+          image: __ECR_REPOSITORY_URL__:__IMAGE_TAG__
+          command: ["python", "scripts/run_migrations.py", "--env", "aws"]
+          envFrom:
+            - configMapRef:
+                name: claim-adjudication-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

@@ -1,0 +1,60 @@
+# Ingests the policy corpus into pgvector + rebuilds the knowledge graph. Must complete
+# before the Deployment rolls (Runbook step 10) — the app has nothing to retrieve
+# against otherwise. `pipelines/data_pipeline.py` only reads a local directory, so an
+# initContainer syncs the S3-uploaded PDFs down first; the app itself never needs S3 read
+# access for this — that's IRSA on this Job's service account only.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-data
+  namespace: claim-adjudication
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: claim-adjudication
+      restartPolicy: Never
+      initContainers:
+        - name: fetch-policies
+          image: amazon/aws-cli:2.17.62
+          command:
+            - sh
+            - -c
+            - "aws s3 cp s3://$(DOCUMENTS_BUCKET)/policies/ /data/policies/ --recursive"
+          envFrom:
+            - configMapRef:
+                name: claim-adjudication-config
+          env:
+            - name: DOCUMENTS_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: claim-adjudication-config
+                  key: DOCUMENTS_BUCKET
+          volumeMounts:
+            - name: policies
+              mountPath: /data/policies
+      containers:
+        - name: seed-data
+          image: __ECR_REPOSITORY_URL__:__IMAGE_TAG__
+          command:
+            - sh
+            - -c
+            - >
+              python -m pipelines.data_pipeline ingest --source /data/policies --domain claims --rebuild-graph &&
+              python -m pipelines.data_pipeline verify --domain claims
+          envFrom:
+            - configMapRef:
+                name: claim-adjudication-config
+          volumeMounts:
+            - name: policies
+              mountPath: /data/policies
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+      volumes:
+        - name: policies
+          emptyDir: {}
