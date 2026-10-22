@@ -90,7 +90,9 @@ class CLA:
         config = {"configurable": {"thread_id": run_id}}
         return await _run_graph(graph, initial_state, config)
 
-    async def run_many(self, source_uris: list[str], domain: str = "claims") -> list[dict[str, Any]]:
+    async def run_many(
+        self, source_uris: list[str], domain: str = "claims"
+    ) -> list[dict[str, Any]]:
         return [await self.run(source_uri, domain=domain) for source_uri in source_uris]
 
     @staticmethod
@@ -113,7 +115,10 @@ def _summarize(result: dict[str, Any]) -> dict[str, Any]:
 
 def _print_summary(summary: dict[str, Any]) -> None:
     status = "VALID" if summary["is_valid"] else "INVALID"
-    print(f"\n[{summary['document_id']}] {status}  (extraction_source={summary['extraction_source']})")
+    print(
+        f"\n[{summary['document_id']}] {status}  "
+        f"(extraction_source={summary['extraction_source']})"
+    )
     fields = summary["extracted_fields"] or {}
     if fields:
         print(f"  member_id={fields.get('member_id')!r} policy_no={fields.get('policy_no')!r} "
@@ -166,7 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser("run", help="run a single claim document through the graph")
-    run_parser.add_argument("source_uri", help="path to a claim PDF, e.g. tests/fixtures/claims/CLM-001.pdf")
+    run_parser.add_argument(
+        "source_uri", help="path to a claim PDF, e.g. tests/fixtures/claims/CLM-001.pdf"
+    )
 
     subparsers.add_parser("run-all", help="run every fixture claim under tests/fixtures/claims/")
 

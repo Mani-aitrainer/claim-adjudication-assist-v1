@@ -122,7 +122,7 @@ def validate_claim(record: dict[str, Any]) -> ValidationResult:
             errors.append(_issue("line_items", "AMOUNT_FORMAT", msg))
         else:
             tolerance = config["amount_balance"]["tolerance"]
-            line_total = sum(line_amounts)
+            line_total = sum(amount for amount in line_amounts if amount is not None)
             if abs(line_total - claimed_amount) > tolerance:
                 msg = f"claimed_amount {claimed_amount} does not match line item sum {line_total}"
                 errors.append(_issue("claimed_amount", "AMOUNT_BALANCE", msg))

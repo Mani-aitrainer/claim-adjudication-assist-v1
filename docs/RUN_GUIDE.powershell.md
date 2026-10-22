@@ -1,11 +1,7 @@
-# Run Guide (PowerShell-corrected copy)
+# Run Guide (Windows PowerShell)
 
-This is a copy of [RUN_GUIDE.md](RUN_GUIDE.md) with one change: the specific command
-blocks that actually failed when run from Windows PowerShell (not Git Bash) in a real
-session are replaced with the PowerShell command that was confirmed to work instead.
-Every other line is untouched — where a block below isn't marked, it's identical to the
-original and still assumes Git Bash, per that file's own "Which shell to run this in"
-guidance.
+This is [RUN_GUIDE.md](RUN_GUIDE.md) rewritten for **Windows PowerShell 5.1**. Every
+command block here is PowerShell. Run them in a PowerShell terminal, not Git Bash.
 
 Two independent paths: **Local** (free, no AWS account needed) and **AWS** (costs money
 from the `terraform apply` step onward). Do Local first — every AWS step assumes the app
@@ -16,24 +12,66 @@ requests.
 
 ---
 
+## PowerShell cheat sheet — read this first
+
+The bash guide uses a few things that don't work in PowerShell. This is what each one
+becomes in this guide:
+
+| Bash | PowerShell | Why it matters |
+|---|---|---|
+| `export AWS_REGION=us-east-1` | `$env:AWS_REGION = "us-east-1"` | `export` doesn't exist. `$env:` sets a real environment variable, so `aws`, `terraform` and bash scripts can see it |
+| `PROJECT=claim-adjudication` | `$PROJECT = "claim-adjudication"` | A plain PowerShell variable. Only PowerShell itself sees it — child programs don't |
+| `X=$(command)` | `$X = command` | No `$(...)` needed around a command |
+| `${PROJECT}-eks` | `"$PROJECT-eks"` | Put it in double quotes. `${PROJECT}` is not the same thing in PowerShell |
+| `"$ECR_URL:latest"` | `"$ECR_URL`:latest"` or `"${ECR_URL}:latest"` | `$ECR_URL:latest` reads as a variable called `ECR_URL:latest`, which is empty |
+| `\` at end of line | `` ` `` (backtick) at end of line | Nothing may come after the backtick, not even a space |
+| `a && b` | `a; if ($?) { b }` or two lines | PowerShell 5.1 has no `&&` |
+| `cp a b` | `Copy-Item a b` | |
+| `curl ...` | `curl.exe ...` | In PowerShell 5.1, `curl` is a different command (`Invoke-WebRequest`) |
+| `... \| jq` | `Invoke-RestMethod ...` or `ConvertFrom-Json` | `jq` usually isn't installed; PowerShell reads JSON by itself |
+| `sed "s#a#b#" file` | `(Get-Content file -Raw) -replace 'a', 'b'` | No `sed` |
+| `base64 -d` | `[Convert]::FromBase64String(...)` | No `base64` |
+| `cmd > file.json` | `cmd \| Set-Content -Encoding ascii file.json` | `>` writes UTF-16, which `jq` and Python scripts can't read |
+| `-var-file=envs/learning.tfvars` | `"-var-file=envs/learning.tfvars"` | PowerShell splits unquoted arguments at the dot |
+| `./scripts/x.sh` | `& $BASH -l ./scripts/x.sh` | `.sh` files need bash. See the next block |
+| `make <target>` | The commands behind the target | `make` isn't on PowerShell's PATH. Each step shows the commands to run instead |
+
+Variables (both `$X` and `$env:X`) last only for the current PowerShell window. If you
+open a new window, run Step 2 of Part 2 again.
+
+Some steps still need bash, because the scripts in `scripts/` are `.sh` files. Git for
+Windows ships with bash. Point a variable at it once per window:
+
+```powershell
+$BASH = "C:\Program Files\Git\bin\bash.exe"
+```
+
+---
+
 ## Part 1 — Run it on your laptop
 
-**Needs:** Python 3.12+, Docker Desktop, `make` (Git Bash on Windows has it), an OpenAI
-API key. No AWS account.
+**Needs:** Python 3.12+, Docker Desktop, an OpenAI API key. No AWS account.
 
 ### 1. Install
 
-```bash
+```powershell
 python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install --upgrade pip
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -e ".[local,testdata,dev]"
+```
+
+If `Activate.ps1` fails with "running scripts is disabled on this system", allow local
+scripts once for your user, then try again:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 ### 2. Configure
 
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 
 Edit `.env` and set `OPENAI_API_KEY=sk-...`. Leave everything else at its default
@@ -44,8 +82,11 @@ Edit `.env` and set `OPENAI_API_KEY=sk-...`. Leave everything else at its defaul
 
 ### 3. Generate the test data
 
-```bash
-make fixtures
+Same as `make fixtures`:
+
+```powershell
+python -m testdata.generate all
+python -m testdata.generate verify
 ```
 
 Produces the 3 policy PDFs, 18 claim/pharmacy PDFs, matching Textract JSON, expected
@@ -53,8 +94,11 @@ outcomes, and the prompt set — all offline and free.
 
 ### 4. Start local infrastructure
 
-```bash
-make up
+Same as `make up`:
+
+```powershell
+docker compose -f docker-compose.local.yml up -d 2>$null
+
 docker compose -f docker-compose.local.yml ps
 ```
 
@@ -63,50 +107,92 @@ No Redis — the plan's local profile never uses it.
 
 ### 5. Run migrations and ingest the policy corpus
 
-```bash
-make migrate
-make seed
+Same as `make migrate` and `make seed`:
+
+```powershell
+python scripts/run_migrations.py --env local
+
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $null, "User")
+Remove-Item Env:OPENAI_API_KEY   # also clear it from this terminal
+
+python -m pipelines.data_pipeline ingest --source ./data/policies/ --domain claims --rebuild-graph
+python -m pipelines.data_pipeline verify --domain claims
 ```
 
-`make seed` is the only local step that spends OpenAI credit — embedding three short
+The seed step is the only local step that spends OpenAI credit — embedding three short
 PDFs, a few cents.
 
 ### 6. Start the API
 
-```bash
-make run-local
+Same as `make run-local`:
+
+```powershell
+uvicorn app.main:app --reload --port 8000 --app-dir src
 ```
 
-```bash
-curl localhost:8000/healthz     # {"status":"ok"}
-curl localhost:8000/readyz      # checks Postgres, cache, secret provider
-open http://localhost:8000/docs # interactive Swagger UI
+In a second PowerShell window:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/healthz     # status: ok
+Invoke-RestMethod http://localhost:8000/readyz      # checks Postgres, cache, secret provider
+Start-Process http://localhost:8000/docs            # opens the Swagger UI in your browser
 ```
 
 ### 7. Submit a claim and watch it stream
 
-```bash
+```powershell
 python scripts/stream_client.py --file tests/fixtures/claims/CLM-001.pdf
 ```
 
-Or with `curl` directly:
+Or with `curl.exe` directly (type `curl.exe`, not `curl`):
 
-```bash
-curl -N -X POST http://localhost:8000/v1/claims/adjudicate \
-  -F "file=@tests/fixtures/claims/CLM-001.pdf" \
+```powershell
+curl.exe -N -X POST http://localhost:8000/v1/claims/adjudicate `
+  -F "file=@tests/fixtures/claims/CLM-001.pdf" `
   -H "Accept: text/event-stream"
 ```
 
-Or by path instead of upload (the API accepts either):
+Or by path instead of upload (the API accepts either). PowerShell 5.1 removes the inner
+double quotes when it passes JSON to a program like `curl.exe`, so escape each one with
+a backslash:
 
-```bash
-curl -N -X POST http://localhost:8000/v1/claims/adjudicate \
-  -H "Content-Type: application/json" \
-  -d '{"path": "tests/fixtures/claims/CLM-001.pdf"}'
+```powershell
+curl.exe -N -X POST http://localhost:8000/v1/claims/adjudicate `
+  -H "Content-Type: application/json" `
+  -d '{\"path\": \"tests/fixtures/claims/CLM-001.pdf\"}'
 ```
 
 Expect a stream of `node_start` / `node_end` events per agent, then one `final` event
 with `decision` and `cost_usd`.
+
+**Or use the browser UI.** `ui/index.html` is a single static page that calls the same
+endpoint and draws the stream live. No build step and no extra server are needed. The
+API allows any origin (CORS), so you can open the file straight from disk:
+
+```powershell
+Start-Process ui\index.html
+```
+
+Then, in the page:
+
+1. Leave **API base** as `http://localhost:8000` (the API from step 6).
+2. **Upload file** tab: choose `tests\fixtures\claims\CLM-001.pdf` and click **Adjudicate**.
+   Or switch to the **Server path** tab and type `tests/fixtures/claims/CLM-001.pdf`.
+   The server reads that path from its own disk, so it only works when the API runs
+   with `uvicorn` from the repo root (step 6). It does **not** work against the Docker
+   container from step 11, because the image has no `tests/` folder. You get `HTTP 500`.
+   Use **Upload file** there.
+3. Watch it run:
+   - **Pipeline** lights up each agent. A `×2` badge means that step ran more than once
+     (a repair or heal-retry loop).
+   - **Execution timeline** shows each agent run in order, with its latency.
+   - **Adjudicator reasoning** streams the model's tokens as they arrive.
+   - **Decision** shows the final JSON and a status badge (`APPROVE`, `PARTIAL`, `DENY`
+     or `MANUAL_REVIEW`).
+   - **Raw event log** (collapsed) lists every SSE event, the same ones `curl.exe` prints.
+
+If you see an `HTTP ...` or `Failed to fetch` error in the red banner, check that the
+API from step 6 is still running.
 
 ### Sample prompts — the interesting fixtures
 
@@ -127,17 +213,17 @@ as step 7, swapping the filename:
 
 ### Sample prompts — natural language (retrieval + explanation)
 
-These live in `tests/fixtures/prompts/claim_queries.yaml` (generated by `make fixtures`)
+These live in `tests/fixtures/prompts/claim_queries.yaml` (generated in step 3)
 and are meant to be asked against a running system, either by hand through
 `GET /v1/graph/subgraph` for the retrieval ones, or as a script you write against
 `GET /v1/runs/{run_id}` for the explanation ones. They're prompts for *you to explore
 the system with*, not a wired-up chat endpoint — there isn't one; asking "why" of a
 decision means pulling `reasoning_trace` from the run and reading it.
 
-**Policy retrieval** (hit the retriever directly):
+**Policy retrieval** (hit the retriever directly). Keep the URL in quotes because of the `&`:
 
-```bash
-curl "localhost:8000/v1/graph/subgraph?codes=CPT-99213&hops=2" | jq
+```powershell
+Invoke-RestMethod "http://localhost:8000/v1/graph/subgraph?codes=CPT-99213&hops=2" | ConvertTo-Json -Depth 10
 ```
 > "What is the per-visit sub-limit for an outpatient consultation under HealthSecure Gold?"
 > "Is a dental crown covered if it isn't accident-related?"
@@ -146,10 +232,15 @@ curl "localhost:8000/v1/graph/subgraph?codes=CPT-99213&hops=2" | jq
 
 **Decision explanation** (run a claim first, grab its `run_id` from the `final` event):
 
-```bash
-RUN_ID=<from the final event>
-curl localhost:8000/v1/runs/$RUN_ID | jq
-curl localhost:8000/v1/runs/$RUN_ID/state | jq '.reasoning_trace'
+```powershell
+
+$out = python scripts/stream_client.py --file tests/fixtures/claims/CLM-001.pdf
+$out
+$RUN_ID = (($out | Select-String '^\[final\] ').Line -replace '^\[final\] ', '' | ConvertFrom-Json).run_id
+$RUN_ID
+
+Invoke-RestMethod "http://localhost:8000/v1/runs/$RUN_ID" | ConvertTo-Json -Depth 10
+(Invoke-RestMethod "http://localhost:8000/v1/runs/$RUN_ID/state").reasoning_trace | ConvertTo-Json -Depth 10
 ```
 > "Why was claim CLM-003 denied?" — read `.decision.rationale` and `.decision.citations`
 > "Walk me through the payable calculation step by step for CLM-005." — read `.reasoning_trace`
@@ -162,49 +253,47 @@ ask; there's no endpoint that would honor them, which is the point:
 
 ### 8. Resume a run from its checkpoint
 
-```bash
-curl -X POST localhost:8000/v1/runs/$RUN_ID/resume
+```powershell
+Invoke-RestMethod -Method Post "http://localhost:8000/v1/runs/$RUN_ID/resume"
 ```
 
 ### 9. Explore the cost/context tradeoff
 
-```bash
+```powershell
 python scripts/tradeoff_demo.py --file tests/fixtures/claims/CLM-005.pdf --profiles lean,balanced,generous
 ```
 
 ### 10. Run the tests
 
-```bash
-make test          # full suite, fake LLM doubles — no network, no spend
-make test-e2e        # the 14-scenario parametrised end-to-end suite
-make lint             # ruff + mypy
+Same as `make test`, `make test-e2e` and `make lint`:
+
+```powershell
+pytest                                              # full suite, fake LLM doubles — no network, no spend
+pytest tests/e2e -q                                 # the 14-scenario parametrised end-to-end suite
+ruff check src tests testdata pipelines scripts     # lint
+mypy src testdata pipelines scripts                 # type check
 ```
 
-### 11. View the dashboard
+### 11. Try it containerized
 
-```bash
-# run a batch of fixtures first so there's data:
-for f in tests/fixtures/claims/CLM-*.pdf; do
-  python scripts/stream_client.py --file "$f"
-done
+Same as `make docker-test`, `make docker-build` and `make docker-run`:
+
+```powershell
+# build the test-stage image and run the full suite inside it
+docker build -f docker/Dockerfile --target test -t claim-adjudication-assist:test .
+docker run --rm claim-adjudication-assist:test
+
+# build the runtime image
+docker build -f docker/Dockerfile --target runtime -t claim-adjudication-assist:latest .
+
+# run it on :8000, same as step 6 but containerized
+docker run --rm -p 8000:8000 --env-file .env claim-adjudication-assist:latest
 ```
 
-Open `http://localhost:3000` (`admin`/`admin`), add Prometheus (`http://prometheus:9090`)
-as a data source, import `monitoring/grafana_dashboard.json`, or just browse
-`localhost:8000/metrics` directly.
+### 12. Shut down
 
-### 12. Try it containerized
-
-```bash
-make docker-test     # builds the test-stage image, runs the full suite inside it
-make docker-build      # builds the runtime image
-make docker-run         # runs it on :8000, same as make run-local but containerized
-```
-
-### 13. Shut down
-
-```bash
-make down                                            # stops containers, keeps volumes
+```powershell
+docker compose -f docker-compose.local.yml down      # stops containers, keeps volumes
 docker compose -f docker-compose.local.yml down -v   # also wipes the database
 ```
 
@@ -233,25 +322,13 @@ database and IAM roles the manifests reference don't exist until Terraform creat
 
 ### Prerequisites
 
-AWS CLI v2, Terraform ≥1.6, `kubectl`, `helm`, Docker, `jq`, and an AWS account with
-permission to create VPC/EKS/RDS/ElastiCache/IAM resources.
+AWS CLI v2, Terraform ≥1.6, `kubectl`, `helm`, Docker, Git for Windows (for its
+`bash.exe`), and an AWS account with permission to create VPC/EKS/RDS/ElastiCache/IAM
+resources. `jq` is only needed by the bash scripts — Step 8 shows how to install it.
 
-### Which shell to run this in
-
-**Every command in Part 2 is bash.** On Windows, run them from **Git Bash** (installed
-with Git) or WSL — not PowerShell. The scripts in `scripts/` are `.sh` files that need
-bash, `jq` and `sed` regardless, and several steps use `export`, `$(...)` and `${VAR}`,
-which PowerShell handles differently.
-
-If you do run the Terraform steps from PowerShell, two things break silently:
-
-| Trap | What happens | Fix |
-|---|---|---|
-| **Dotted arguments get split.** PowerShell 5.1 splits `-var-file=envs/learning.tfvars` at the dot and passes Terraform `-var-file=envs/learning` plus a stray `.tfvars` | `Error: Too many command line arguments` | Quote every `-flag=value` argument: `"-var-file=envs/learning.tfvars"` |
-| **`>` writes UTF-16.** `terraform output -json > .tf-outputs.json` produces a UTF-16 file | Nothing — until `render_k8s_config.sh` fails in Step 8 with `jq: parse error: Invalid numeric literal` | Pipe instead: `terraform output -json \| Set-Content -Encoding ascii ..\..\.tf-outputs.json` |
-
-Step 4 below has a full PowerShell version with both fixes applied. From Step 5 onward,
-switch to Git Bash.
+**Use one PowerShell window for all of Part 2.** Steps 6–13 use variables set in earlier
+steps (`$ECR_URL`, `$IMAGE`, `$BASH` and so on). If you open a new window, run Step 2 and
+the first lines of Step 6 and Step 10 again.
 
 ### What Terraform creates for you — IAM in particular
 
@@ -289,31 +366,46 @@ from your laptop, as this guide does, doesn't need it.
 
 ### Step 1 — AWS credentials on your machine
 
-```bash
+```powershell
 aws configure                                 # access key, secret key, region (us-east-1)
 aws sts get-caller-identity                   # confirms you're the right account
-cp .credentials.example .credentials          # gitignored — never commit real values
-# fill in .credentials with the same values, then:
-export $(grep -v '^#' .credentials | xargs)
+Copy-Item .credentials.example .credentials   # gitignored — never commit real values
+```
+
+Fill in `.credentials` with the same values, then load each `KEY=value` line into an
+environment variable (this replaces bash's `export $(grep -v '^#' .credentials | xargs)`):
+
+```powershell
+Get-Content .credentials | Where-Object { $_ -match '^\s*[^#\s].*=' } | ForEach-Object {
+  $name, $value = $_ -split '=', 2
+  Set-Item -Path "env:$($name.Trim())" -Value $value.Trim()
+}
 ```
 
 ### Step 2 — set deployment variables
 
-```bash
-export AWS_REGION=us-east-1
-export PROJECT=claim-adjudication
-export CLUSTER_NAME=${PROJECT}-eks
-export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```powershell
+$env:AWS_REGION = "us-east-1"
+$PROJECT        = "claim-adjudication"
+$CLUSTER_NAME   = "$PROJECT-eks"
+$ACCOUNT_ID     = aws sts get-caller-identity --query Account --output text
+$BASH           = "C:\Program Files\Git\bin\bash.exe"
+
+# the bash scripts in Steps 8 and 16 read PROJECT from the environment
+$env:PROJECT    = $PROJECT
 ```
+
+Check them: `"$PROJECT / $CLUSTER_NAME / $ACCOUNT_ID / $env:AWS_REGION"` should print
+four non-empty values.
 
 `AWS_REGION` here is for the `aws` CLI calls in this guide and in `scripts/`. It does
 **not** steer Terraform: the provider blocks set `region` explicitly (from `var.aws_region`),
 and an explicit provider `region` beats `AWS_REGION` and `~/.aws/config` both. Note also
 that `.credentials` is an ordinary key=value file — nothing reads it automatically, which
-is what the `export $(grep ...)` line in Step 1 is for. To actually deploy to a different
-region, change `aws_region` **and** `availability_zones` in `infra/terraform/variables.tf`,
-`region` in `infra/terraform/backend.tf`, `aws_region` in `infra/terraform/envs/learning.tfvars`,
-and the `aws_region` default in `bootstrap/main.tf`.
+is what the `Get-Content .credentials` block in Step 1 is for. To actually deploy to a
+different region, change `aws_region` **and** `availability_zones` in
+`infra/terraform/variables.tf`, `region` in `infra/terraform/backend.tf`, `aws_region` in
+`infra/terraform/envs/learning.tfvars`, and the `aws_region` default in `bootstrap/main.tf`.
 
 ### Step 3 — bootstrap the Terraform state backend (once, ever)
 
@@ -321,78 +413,49 @@ This is a **separate Terraform root module with its own local state** — it cre
 bucket and DynamoDB table that the *main* module will then use as its remote backend. You
 can't bootstrap a remote backend with a remote backend, which is why it's split out.
 
-```bash
-cd infra/terraform/bootstrap
+```powershell
+cd infra\terraform\bootstrap
 terraform init                        # downloads the AWS provider (~600MB, needs disk space)
-terraform plan                         # 4 resources: bucket, versioning, encryption, lock table
+terraform plan                        # 4 resources: bucket, versioning, encryption, lock table
 terraform apply -auto-approve
-terraform output                        # note the state_bucket name it prints
-cd ../../..
+terraform output                      # note the state_bucket name it prints
+cd ..\..\..
 ```
 
 Run this **once per AWS account, ever.** If you re-run `apply` later it's a no-op. Do
-*not* delete the local `terraform.tfstate` file this leaves in `bootstrap/` — losing it
+*not* delete the local `terraform.tfstate` file this leaves in `bootstrap\` — losing it
 means Terraform forgets it owns the bucket.
 
 ### Step 4 — provision everything else (the main Terraform run)
 
 First set your budget alert email, since AWS Budgets requires a real subscriber address
-and the variable has no default:
-
-```bash
-# edit infra/terraform/envs/learning.tfvars and replace CHANGE-ME@example.com
-```
+and the variable has no default: edit `infra/terraform/envs/learning.tfvars` and replace
+`CHANGE-ME@example.com`.
 
 Then:
 
-```bash
-cd infra/terraform
+```powershell
+cd infra\terraform
 
-# 4a. init — wires this module to the S3 backend the bootstrap step created
-terraform init -backend-config="bucket=${PROJECT}-tfstate-${ACCOUNT_ID}"
+# 4a. init — wires this module to the S3 backend the bootstrap step created.
+#     The bucket name is <project>-tfstate-<account id>-<region>.
+terraform init "-backend-config=bucket=$PROJECT-tfstate-$ACCOUNT_ID-$env:AWS_REGION"
 
 # 4b. sanity checks before anything is created (both are free and offline)
 terraform fmt -recursive -check    # formatting
-terraform validate                  # syntax + module wiring
+terraform validate                 # syntax + module wiring
 
-# 4c. see exactly what will be created — read this before applying
-terraform plan -var-file=envs/learning.tfvars -out=tfplan
+# 4c. see exactly what will be created — read this before applying.
+#     The quotes are required: without them PowerShell splits the argument at the dot.
+terraform plan "-var-file=envs/learning.tfvars" "-out=tfplan"
 
 # 4d. create it. ~20-25 minutes, mostly EKS (~10 min) and RDS (~10 min)
 terraform apply tfplan
 
-# 4e. export the outputs every later step reads
-terraform output -json > ../../.tf-outputs.json
-cd ../..
-```
-
-**Same step from PowerShell** — note the quoted `-flag=value` arguments and the
-`Set-Content` pipe; both are required, not stylistic:
-
-```powershell
-$env:AWS_REGION = "us-east-1"
-$env:PROJECT    = "claim-adjudication"
-$env:ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
-
-cd infra\terraform
-
-terraform init "-backend-config=bucket=$($env:PROJECT)-tfstate-$($env:ACCOUNT_ID)"
-terraform fmt -recursive -check
-terraform validate
-terraform plan "-var-file=envs/learning.tfvars" "-out=tfplan"
-terraform apply tfplan
-
-# NOT `>` — PowerShell 5.1 writes UTF-16 with `>`, which jq cannot read
+# 4e. export the outputs every later step reads.
+#     NOT `>` — PowerShell 5.1 writes UTF-16 with `>`, which jq cannot read
 terraform output -json | Set-Content -Encoding ascii ..\..\.tf-outputs.json
 cd ..\..
-```
-
-Or with the Makefile shortcuts (from Git Bash), once `learning.tfvars` has your email:
-
-```bash
-make tf-plan
-make tf-apply
-cd infra/terraform && terraform output -json > ../../.tf-outputs.json && cd ../..
 ```
 
 **What `apply` creates**, roughly in dependency order — Terraform works most of this out
@@ -412,10 +475,11 @@ control:
 
 | Symptom | Cause / fix |
 |---|---|
-| `Error: Too many command line arguments` on `plan` / `destroy` | You're in PowerShell, which split `-var-file=envs/learning.tfvars` at the dot. Quote it: `"-var-file=envs/learning.tfvars"` — or switch to Git Bash |
+| `Error: Too many command line arguments` on `plan` / `destroy` | PowerShell split `-var-file=envs/learning.tfvars` at the dot. Quote it: `"-var-file=envs/learning.tfvars"` |
+| `Error: Failed to get existing workspaces: S3 bucket does not exist` on `init` | The bucket name is wrong or empty. Check `$PROJECT`, `$ACCOUNT_ID` and `$env:AWS_REGION` are set (Step 2) and compare with the `state_bucket` output from Step 3 |
 | `Error: creating EKS Cluster: InvalidParameterException` on the AZ | Your account doesn't support one of the two AZs in `var.availability_zones` — change them in `learning.tfvars` |
 | `AccessDenied` partway through | The IAM identity from Step 1 is missing a permission; the error names the action — add it and re-run `apply` (Terraform resumes, it doesn't start over) |
-| `not enough space on the disk` at `init` | The AWS provider binary is ~600MB per module; free space or set `TF_PLUGIN_CACHE_DIR` to a drive that has room |
+| `not enough space on the disk` at `init` | The AWS provider binary is ~600MB per module; free space or set `$env:TF_PLUGIN_CACHE_DIR = "E:\tf-cache"` (any drive with room; create the folder first) |
 | `BudgetAlertEmail` validation error | `budget_alert_email` is still `CHANGE-ME@example.com` |
 | Apply hangs ~20 min on EKS | Normal. EKS control plane creation genuinely takes that long |
 
@@ -426,44 +490,38 @@ message) clears it.
 
 **Verify IAM actually landed** before moving on:
 
-```bash
-aws iam get-role --role-name ${PROJECT}-app-irsa      --query 'Role.Arn' --output text
-aws iam get-role --role-name ${PROJECT}-alb-controller --query 'Role.Arn' --output text
-aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION \
+```powershell
+aws iam get-role --role-name "$PROJECT-app-irsa" --query 'Role.Arn' --output text
+aws iam get-role --role-name "$PROJECT-alb-controller" --query 'Role.Arn' --output text
+aws eks describe-cluster --name $CLUSTER_NAME --region $env:AWS_REGION `
   --query 'cluster.identity.oidc.issuer' --output text     # the IRSA trust anchor
 ```
 
-**[PowerShell-corrected]** `${PROJECT}` / `$CLUSTER_NAME` / `$AWS_REGION` are bash
-interpolation and don't expand in PowerShell — they silently become empty, which turns
-`--role-name` into a bare flag with no value (`ParamValidation: expected one argument`).
-Set the PowerShell variables first, then reference them as `$VAR`, not `${VAR}`:
-
-```powershell
-$PROJECT     = "claim-adjudication"
-$CLUSTER_NAME = "$PROJECT-eks"
-$AWS_REGION  = "us-east-1"
-
-aws iam get-role --role-name "$PROJECT-app-irsa" --query 'Role.Arn' --output text
-aws iam get-role --role-name "$PROJECT-alb-controller" --query 'Role.Arn' --output text
-aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION `
-  --query 'cluster.identity.oidc.issuer' --output text
-```
+If you see `ParamValidation: expected one argument`, a variable is empty — run Step 2 again.
 
 ### Step 5 — inject the OpenAI key (never in `.tf`, never in `.env` on this profile)
 
-```bash
-aws secretsmanager put-secret-value \
-  --secret-id ${PROJECT}/openai-api-key \
-  --secret-string '{"OPENAI_API_KEY":"sk-..."}' \
-  --region $AWS_REGION
-```
-
-**[PowerShell-corrected]** `\` line continuations and `${PROJECT}` are bash — use one
-line with literal values. Keep the **single** quotes around the JSON so PowerShell
-passes the inner double quotes through untouched:
+PowerShell 5.1 strips the double quotes out of JSON when it passes it to `aws.exe`, so
+`--secret-string '{"OPENAI_API_KEY":"sk-..."}'` arrives as `{OPENAI_API_KEY:sk-...}`,
+which is not valid JSON. Write the JSON to a temp file and pass the file instead:
 
 ```powershell
-aws secretsmanager put-secret-value --secret-id claim-adjudication/openai-api-key --secret-string '{"OPENAI_API_KEY":"sk-..."}' --region us-east-1
+$secretFile = "$env:TEMP\openai-secret.json"
+'{"OPENAI_API_KEY":"sk-..."}' | Set-Content -Encoding ascii $secretFile
+
+aws secretsmanager put-secret-value `
+  --secret-id "$PROJECT/openai-api-key" `
+  --secret-string "file://$secretFile" `
+  --region $env:AWS_REGION
+
+Remove-Item $secretFile    # don't leave the key on disk
+```
+
+Check it stored valid JSON (this prints your key, so don't run it on a shared screen):
+
+```powershell
+aws secretsmanager get-secret-value --secret-id "$PROJECT/openai-api-key" `
+  --region $env:AWS_REGION --query SecretString --output text
 ```
 
 The `OPENAI_API_KEY` **key name inside the JSON matters** — `src/app/core/secrets.py`
@@ -471,24 +529,14 @@ reads exactly that field out of the secret.
 
 ### Step 6 — build and push the image
 
-```bash
-ECR_URL=$(jq -r '.ecr_repository_url.value' .tf-outputs.json)
-aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
-
-make docker-build
-make docker-push ECR_URL=$ECR_URL
-```
-
-**[PowerShell-corrected]** `VAR=$(...)` is bash-only; without `jq` installed, read the
-JSON with `ConvertFrom-Json` instead. `docker login` needs only the registry **host**
-(no repo path) or it 400s; and PowerShell 5.1's pipe re-encodes the token in a way ECR
-rejects, so pass it as an argument instead of piping. `make` also doesn't work here
-(no `test` command under `cmd.exe`), so build/tag/push directly:
+`docker login` needs only the registry **host** (no repo path) or it fails with a 400.
+PowerShell 5.1's pipe also changes the token in a way ECR rejects, so pass it as an
+argument instead of piping it:
 
 ```powershell
 $ECR_URL  = (Get-Content .tf-outputs.json | ConvertFrom-Json).ecr_repository_url.value
 $ECR_HOST = $ECR_URL.Split('/')[0]
-$TOKEN    = aws ecr get-login-password --region us-east-1
+$TOKEN    = aws ecr get-login-password --region $env:AWS_REGION
 docker login --username AWS --password $TOKEN $ECR_HOST
 
 docker build -f docker/Dockerfile --target runtime -t claim-adjudication-assist:latest .
@@ -498,8 +546,8 @@ docker push "${ECR_URL}:latest"
 
 ### Step 7 — connect kubectl
 
-```bash
-aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+```powershell
+aws eks update-kubeconfig --name $CLUSTER_NAME --region $env:AWS_REGION
 kubectl get nodes                  # should list 2 Ready nodes
 ```
 
@@ -509,26 +557,20 @@ This has to happen **before** the Helm installs in Step 9, because the AWS Load 
 Controller's chart is installed with `serviceAccount.create=false` — the ServiceAccount
 carrying its IRSA role annotation must already exist, and this script is what writes it.
 
-```bash
-./scripts/render_k8s_config.sh
-```
-
-**[PowerShell-corrected]** `./script.sh` doesn't execute in PowerShell — call bash
-explicitly. The script needs `jq`; if PowerShell's own `jq` isn't installed, get one
-onto Git Bash's PATH (this doesn't touch PowerShell's PATH — running the script only
-needs bash to find it):
+The script is bash and needs `jq`. If Git Bash doesn't have `jq` yet, download it into
+`~/bin`, which Git Bash adds to its PATH:
 
 ```powershell
+# one-time, only if `& $BASH -lc "jq --version"` fails:
 New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
 Invoke-WebRequest -Uri "https://github.com/jqlang/jq/releases/latest/download/jq-windows-amd64.exe" -OutFile "$HOME\bin\jq.exe"
 
-& "C:\Program Files\Git\bin\bash.exe" -l ./scripts/render_k8s_config.sh
+& $BASH -l ./scripts/render_k8s_config.sh
 ```
 
-`-l` (login shell) is what makes Git Bash pick up `~/bin`. Also confirm
-`.tf-outputs.json` is plain ASCII/UTF-8, not the UTF-16 that `>` produces in
-PowerShell (Step 4's PowerShell block already writes it correctly) — otherwise this
-script fails with `jq: parse error: Invalid numeric literal`.
+`-l` (login shell) is what makes Git Bash pick up `~/bin`. If the script fails with
+`jq: parse error: Invalid numeric literal`, `.tf-outputs.json` was written as UTF-16 —
+write it again with the `Set-Content -Encoding ascii` line from Step 4e.
 
 Writes three account-specific, gitignored files from `.tf-outputs.json`:
 
@@ -541,7 +583,7 @@ Writes three account-specific, gitignored files from `.tf-outputs.json`:
 The tracked `k8s/serviceaccount.yaml` and `k8s/alb-controller-serviceaccount.yaml` stay
 placeholder templates — the script never overwrites them.
 
-```bash
+```powershell
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/serviceaccount.rendered.yaml
 kubectl apply -f k8s/alb-controller-serviceaccount.rendered.yaml
@@ -550,55 +592,46 @@ kubectl apply -f k8s/configmap.yaml
 
 Confirm IRSA is wired before going further — this should print the role ARN, not empty:
 
-```bash
-kubectl get sa claim-adjudication -n claim-adjudication \
+```powershell
+kubectl get sa claim-adjudication -n claim-adjudication `
   -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}'
-kubectl get sa aws-load-balancer-controller -n kube-system \
+kubectl get sa aws-load-balancer-controller -n kube-system `
   -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}'
 ```
 
 ### Step 9 — install cluster add-ons
 
-```bash
-helm repo add eks https://aws.github.io/eks-charts && helm repo update
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=$CLUSTER_NAME \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller
+If `helm` isn't installed, download the binary into `~/bin` and add that folder to this
+window's PATH:
 
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
-
-kubectl get deploy -n kube-system aws-load-balancer-controller   # should reach 2/2 Ready
+```powershell
+# one-time, only if `helm version` fails:
+Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.16.3-windows-amd64.zip" -OutFile "$env:TEMP\helm.zip"
+Expand-Archive -Force "$env:TEMP\helm.zip" "$env:TEMP\helm"
+New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
+Copy-Item "$env:TEMP\helm\windows-amd64\helm.exe" "$HOME\bin\helm.exe"
+$env:Path += ";$HOME\bin"
 ```
 
-**[PowerShell-corrected]** PowerShell 5.1 has no `&&`, so split it onto separate lines.
-If `helm` itself isn't on the machine (no `winget` either), grab the binary directly.
-And **add `region` and `vpcId` explicitly** — without them the controller falls back to
+**Pass `region` and `vpcId` explicitly.** Without them the controller falls back to
 EC2 instance-metadata lookups that can time out on some networks, crash-looping the
 controller with `unable to initialize AWS cloud: failed to get VPC ID` and leaving the
 `aws-load-balancer-webhook-service` with no endpoints (which then fails every later
 `helm install` that creates a Service, including the monitoring stack below):
 
 ```powershell
-# one-time, only if `helm version` fails:
-Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.16.3-windows-amd64.zip" -OutFile "$env:TEMP\helm.zip"
-Expand-Archive -Force "$env:TEMP\helm.zip" "$env:TEMP\helm"
-Copy-Item "$env:TEMP\helm\windows-amd64\helm.exe" "$HOME\bin\helm.exe"
-$env:Path += ";$HOME\bin"
-
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
 
-$VPC_ID = aws eks describe-cluster --name claim-adjudication-eks --region us-east-1 --query 'cluster.resourcesVpcConfig.vpcId' --output text
+$VPC_ID = aws eks describe-cluster --name $CLUSTER_NAME --region $env:AWS_REGION `
+  --query 'cluster.resourcesVpcConfig.vpcId' --output text
 
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller `
   -n kube-system `
-  --set clusterName=claim-adjudication-eks `
+  --set clusterName=$CLUSTER_NAME `
   --set serviceAccount.create=false `
   --set serviceAccount.name=aws-load-balancer-controller `
-  --set region=us-east-1 `
+  --set region=$env:AWS_REGION `
   --set vpcId=$VPC_ID
 
 kubectl rollout status deploy/aws-load-balancer-controller -n kube-system
@@ -613,20 +646,16 @@ kubectl get deploy -n kube-system aws-load-balancer-controller   # should reach 
 
 ### Step 10 — run migrations against RDS
 
-```bash
-IMAGE="${ECR_URL}:latest"
-sed "s#__ECR_REPOSITORY_URL__:__IMAGE_TAG__#${IMAGE}#" k8s/job-db-migrate.yaml | kubectl apply -f -
-kubectl wait --for=condition=complete job/db-migrate -n claim-adjudication --timeout=300s
-kubectl logs job/db-migrate -n claim-adjudication
-```
-
-**[PowerShell-corrected]** No `sed`; use `-replace` on the file content instead. Note
-the backtick before the colon in `$IMAGE` — `$ECR_URL:latest` without it parses as a
-PowerShell scoped-variable reference and silently evaluates to empty, which later shows
-up as `spec.template.spec.containers[0].image: Required value` on `kubectl apply`:
+The manifests hold a placeholder image name. Replace it with `-replace` (the bash guide
+uses `sed`) and pipe the result into `kubectl`. Note the backtick before the colon in
+`$IMAGE` — `"$ECR_URL:latest"` without it is read as a variable called `ECR_URL:latest`,
+which is empty, and `kubectl apply` then fails with
+`spec.template.spec.containers[0].image: Required value`:
 
 ```powershell
 $IMAGE = "$ECR_URL`:latest"
+"$IMAGE"    # check: should print <account>.dkr.ecr.<region>.amazonaws.com/...:latest
+
 (Get-Content k8s/job-db-migrate.yaml -Raw) -replace '__ECR_REPOSITORY_URL__:__IMAGE_TAG__', $IMAGE | kubectl apply -f -
 kubectl wait --for=condition=complete job/db-migrate -n claim-adjudication --timeout=300s
 kubectl logs job/db-migrate -n claim-adjudication
@@ -637,16 +666,6 @@ edited in place: `kubectl delete job db-migrate -n claim-adjudication --ignore-n
 
 ### Step 11 — upload policy PDFs to S3 and seed pgvector + the graph
 
-```bash
-BUCKET=$(jq -r '.documents_bucket.value' .tf-outputs.json)
-aws s3 cp ./data/policies/ s3://$BUCKET/policies/ --recursive
-
-sed "s#__ECR_REPOSITORY_URL__:__IMAGE_TAG__#${IMAGE}#" k8s/job-seed-data.yaml | kubectl apply -f -
-kubectl wait --for=condition=complete job/seed-data -n claim-adjudication --timeout=900s
-kubectl logs job/seed-data -n claim-adjudication
-```
-
-**[PowerShell-corrected]** Same `jq`-free JSON read and `sed`-free replace as above.
 Use one variable name consistently — `$env:BUCKET` and `$BUCKET` are two different
 variables in PowerShell, and mixing them (setting one, reading the other) silently
 produces an empty bucket name (`Invalid bucket name ""` from `aws s3 cp`):
@@ -662,8 +681,8 @@ kubectl logs job/seed-data -n claim-adjudication
 
 ### Step 12 — deploy the app
 
-```bash
-sed "s#__ECR_REPOSITORY_URL__:__IMAGE_TAG__#${IMAGE}#" k8s/deployment.yaml | kubectl apply -f -
+```powershell
+(Get-Content k8s/deployment.yaml -Raw) -replace '__ECR_REPOSITORY_URL__:__IMAGE_TAG__', $IMAGE | kubectl apply -f -
 kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/ingress.yaml
 kubectl apply -f k8s/hpa.yaml
@@ -671,21 +690,22 @@ kubectl apply -f k8s/servicemonitor.yaml
 kubectl rollout status deployment/claim-adjudication -n claim-adjudication
 ```
 
-Steps 8, 10, 11 and 12 together are also just `make deploy` once `.tf-outputs.json`
-exists and the cluster add-ons from Step 9 are installed.
+Don't use `make deploy` as a shortcut here: it needs bash, and it applies the manifests
+without replacing the image placeholder.
 
 ### Step 13 — smoke test through the ALB
 
-```bash
-ALB_URL=$(kubectl get ingress claim-adjudication -n claim-adjudication -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-echo "http://$ALB_URL"                    # DNS takes 2-3 minutes to resolve
+```powershell
+$ALB_URL = kubectl get ingress claim-adjudication -n claim-adjudication `
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+"http://$ALB_URL"                    # DNS takes 2-3 minutes to resolve
 
-./scripts/smoke_test.sh "http://$ALB_URL"
+& $BASH -l ./scripts/smoke_test.sh "http://$ALB_URL"
 ```
 
 Or stream a claim against the live service the same way as local, just with `--url`:
 
-```bash
+```powershell
 python scripts/stream_client.py --url "http://$ALB_URL" --file tests/fixtures/claims/CLM-006.pdf
 ```
 
@@ -702,18 +722,32 @@ required reviewer for the approval gate.
 
 ### Step 15 — view the dashboard on the cluster
 
-```bash
+Get the Grafana admin password (stored base64-encoded in the secret):
+
+```powershell
+$encoded = kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}'
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
+```
+
+Then forward the port. This keeps running, so leave the window open and browse to
+`http://localhost:3000` (user `admin`):
+
+```powershell
 kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
-kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d
 ```
 
 ### Step 16 — destroy everything
 
-```bash
-make destroy
-# or directly:
-./scripts/destroy_all.sh
+`destroy_all.sh` is a bash script that also uses `jq` and `python3`, so run it through
+Git Bash. It reads `PROJECT` and `AWS_REGION` from the environment (set in Step 2):
+
+```powershell
+& $BASH -l ./scripts/destroy_all.sh
 ```
+
+If it fails with `python3: command not found`, Git Bash can't see your Python as
+`python3`. Run it from a Git Bash window after `alias python3=python`, or tear down by
+hand as shown in the next section.
 
 Runs, in order: delete the Ingress (releases the ALB) → delete any LoadBalancer Services →
 empty the S3 bucket (including versions) → delete ECR images → force-delete Secrets
@@ -735,32 +769,19 @@ If an apply failed or you stopped partway and want a clean slate, the same scrip
 still the right entry point — `terraform destroy` only touches what's in state, and steps
 1–2 skip themselves when there's no cluster:
 
-```bash
-./scripts/destroy_all.sh
+```powershell
+& $BASH -l ./scripts/destroy_all.sh
 ```
 
 If you'd rather run it by hand and watch each step, the minimum is:
 
-```bash
-cd infra/terraform
-terraform init -reconfigure -backend-config="bucket=${PROJECT}-tfstate-${ACCOUNT_ID}"
-terraform state list                                    # see exactly what exists
-terraform destroy -var-file=envs/learning.tfvars        # review the plan, then confirm
-cd ../..
-```
-
-From PowerShell, quote the dotted arguments for the same reason as Step 4:
-
 ```powershell
 cd infra\terraform
-terraform init -reconfigure "-backend-config=bucket=$($env:PROJECT)-tfstate-$($env:ACCOUNT_ID)"
-terraform state list
-terraform destroy "-var-file=envs/learning.tfvars"
+terraform init -reconfigure "-backend-config=bucket=$PROJECT-tfstate-$ACCOUNT_ID-$env:AWS_REGION"
+terraform state list                                    # see exactly what exists
+terraform destroy "-var-file=envs/learning.tfvars"      # review the plan, then confirm
 cd ..\..
 ```
-
-`scripts/destroy_all.sh` itself needs Git Bash — it's a bash script that also uses `jq`
-and `python3`.
 
 **Three things used to block a destroy-and-recreate cycle. All three are now handled in
 the Terraform, but they're worth understanding because the failure messages are cryptic:**
@@ -775,18 +796,18 @@ That third one is the nastiest: AWS keeps a deleted secret's *name* reserved for
 days by default, so the destroy looks like it worked and the **recreate** is what fails.
 If you hit it on a stack created before this was fixed, clear it by hand:
 
-```bash
-aws secretsmanager delete-secret --secret-id ${PROJECT}/openai-api-key \
-  --force-delete-without-recovery --region $AWS_REGION
+```powershell
+aws secretsmanager delete-secret --secret-id "$PROJECT/openai-api-key" `
+  --force-delete-without-recovery --region $env:AWS_REGION
 ```
 
 **Check for orphans before recreating.** If an apply was interrupted, a resource can exist
 in AWS but not in Terraform state — `terraform destroy` won't touch those, and the next
 apply collides with them on a name:
 
-```bash
-aws resourcegroupstaggingapi get-resources \
-  --tag-filters Key=Project,Values=${PROJECT} --region $AWS_REGION \
+```powershell
+aws resourcegroupstaggingapi get-resources `
+  --tag-filters "Key=Project,Values=$PROJECT" --region $env:AWS_REGION `
   --query 'ResourceTagMappingList[].ResourceARN' --output table
 ```
 
@@ -798,23 +819,23 @@ its last step and exits non-zero if anything survives.
 state bucket and DynamoDB lock table are meant to outlive the stack. Destroying them
 throws away the state file that tracks everything else.
 
-### Quick reference — script/command order
+### Quick reference — command order
 
 ```
-aws configure                                          # Step 1-2
-  └─ infra/terraform/bootstrap  (terraform apply, once ever)        # Step 3
-       └─ infra/terraform       (terraform init → validate → plan → apply)  # Step 4
-            └─ terraform output -json > .tf-outputs.json
-                 └─ aws secretsmanager put-secret-value   (inject OpenAI key)   # Step 5
-                      └─ make docker-build && make docker-push       # Step 6
-                           └─ aws eks update-kubeconfig              # Step 7
-                                └─ scripts/render_k8s_config.sh      # Step 8
+aws configure + Get-Content .credentials + $env:AWS_REGION ...           # Step 1-2
+  └─ infra\terraform\bootstrap  (terraform apply, once ever)             # Step 3
+       └─ infra\terraform       (terraform init → validate → plan → apply)  # Step 4
+            └─ terraform output -json | Set-Content -Encoding ascii .tf-outputs.json
+                 └─ aws secretsmanager put-secret-value (file://)  (inject OpenAI key)   # Step 5
+                      └─ docker build + docker tag + docker push         # Step 6
+                           └─ aws eks update-kubeconfig                  # Step 7
+                                └─ & $BASH -l ./scripts/render_k8s_config.sh    # Step 8
                                      └─ kubectl apply: namespace, BOTH serviceaccounts, configmap
                                           └─ helm install (ALB controller, kube-prometheus-stack)  # Step 9
-                                               └─ k8s/job-db-migrate.yaml       # Step 10
+                                               └─ k8s/job-db-migrate.yaml (-replace image)      # Step 10
                                                     └─ aws s3 cp (policies) + k8s/job-seed-data.yaml  # Step 11
                                                          └─ k8s/deployment + service + ingress + hpa + servicemonitor  # Step 12
-                                                              └─ scripts/smoke_test.sh   # Step 13
+                                                              └─ & $BASH -l ./scripts/smoke_test.sh   # Step 13
 ```
 
 Two ordering rules the tree encodes:

@@ -11,6 +11,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import warnings  # noqa: E402
+
+from langchain_core._api.deprecation import LangChainPendingDeprecationWarning  # noqa: E402
+
+# langgraph 0.2 doesn't pass allowed_objects yet; harmless until we upgrade.
+warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
 
 from app.core.settings import Settings  # noqa: E402
 from app.persistence.db import run_migration_file  # noqa: E402
