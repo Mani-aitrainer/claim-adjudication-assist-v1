@@ -18,8 +18,9 @@ output "oidc_issuer_url" {
   value = aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
 
-# EKS attaches the cluster security group to every managed node group's ENIs, so it
-# doubles as the node security group for RDS/Redis ingress rules.
+# EKS attaches its own auto-created cluster security group (not the extra groups in
+# vpc_config.security_group_ids, which only reach the control-plane ENIs) to every managed
+# node group's ENIs, so that group is the one RDS/Redis ingress rules must allow.
 output "node_security_group_id" {
-  value = aws_security_group.cluster.id
+  value = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
 }

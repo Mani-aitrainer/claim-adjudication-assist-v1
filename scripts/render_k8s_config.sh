@@ -19,6 +19,7 @@ RDS_ENDPOINT="$(jq_out rds_endpoint)"
 DOCUMENTS_BUCKET="$(jq_out documents_bucket)"
 OPENAI_SECRET_NAME="$(jq_out openai_secret_name)"
 AWS_REGION="$(jq_out aws_region)"
+RDS_SECRET_ARN="$(jq_out rds_master_secret_arn)"
 APP_IRSA_ROLE_ARN="$(jq_out app_irsa_role_arn)"
 ALB_CONTROLLER_ROLE_ARN="$(jq_out alb_controller_role_arn)"
 
@@ -46,6 +47,7 @@ kubectl create configmap claim-adjudication-config \
   --from-literal=USE_SECRETS_MANAGER=true \
   --from-literal=VECTOR_BACKEND=pgvector \
   --from-literal=POSTGRES_DSN="postgresql://claims@${RDS_ENDPOINT}/claims" \
+  --from-literal=RDS_SECRET_ARN="$RDS_SECRET_ARN" \
   --from-literal=AWS_REGION="$AWS_REGION" \
   --from-literal=SECRET_NAME_OPENAI="$OPENAI_SECRET_NAME" \
   --from-literal=DOCUMENTS_DIR="s3://${DOCUMENTS_BUCKET}" \

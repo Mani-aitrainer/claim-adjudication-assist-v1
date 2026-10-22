@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Terraform
+#   Local working dirs, provider lock files, state, plans and crash logs.
+**/.terraform/*
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Generated from `terraform output -json` and scripts/render_k8s_config.sh
+.tf-outputs.json
+k8s/*.rendered.yaml
+k8s/configmap.yaml

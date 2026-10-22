@@ -53,6 +53,9 @@ COPY --from=builder /install /usr/local
 COPY src/ ./src/
 COPY config/ ./config/
 COPY domains/ ./domains/
+# scripts/ and pipelines/ are run by the db-migrate and seed-data k8s Jobs.
+COPY scripts/ ./scripts/
+COPY pipelines/ ./pipelines/
 COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
