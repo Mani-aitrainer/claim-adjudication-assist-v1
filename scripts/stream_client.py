@@ -17,6 +17,9 @@ def stream_claim(base_url: str, file_path: str) -> None:
         httpx.Client(timeout=None) as client,
         client.stream("POST", url, files={"file": f}) as response,
     ):
+        if response.is_error:
+            response.read()
+            raise SystemExit(f"HTTP {response.status_code}: {response.text}")
         event_name = "message"
         for line in response.iter_lines():
             if not line:
