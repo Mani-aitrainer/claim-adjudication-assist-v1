@@ -22,6 +22,7 @@ AWS_REGION="$(jq_out aws_region)"
 RDS_SECRET_ARN="$(jq_out rds_master_secret_arn)"
 APP_IRSA_ROLE_ARN="$(jq_out app_irsa_role_arn)"
 ALB_CONTROLLER_ROLE_ARN="$(jq_out alb_controller_role_arn)"
+REDIS_ENDPOINT="$(jq_out redis_primary_endpoint)"
 
 # --- *.rendered.yaml — substitute the IRSA role ARN placeholders --------------------
 # Written to separate, gitignored files so the tracked templates keep their placeholder
@@ -36,12 +37,20 @@ sed "s#__ALB_CONTROLLER_ROLE_ARN__#${ALB_CONTROLLER_ROLE_ARN}#" \
   > "${REPO_ROOT}/k8s/alb-controller-serviceaccount.rendered.yaml"
 
 # --- configmap.yaml — agents.yaml + tradeoff.yaml as files, plus non-secret env -----
+# DOCUMENTS_DIR must be a local folder: the upload route and the OCR providers use plain
+# file paths, so "s3://..." gets treated as a folder named "s3:" and fails on the pod's
+# read-only filesystem. /tmp is the pod's writable emptyDir (see k8s/deployment.yaml).
+# MSYS2_ARG_CONV_EXCL: on Windows, Git Bash rewrites "/tmp/documents" into a Windows path
+# (C:/Users/.../Temp/documents) before kubectl.exe sees it. This turns that off for the
+# DOCUMENTS_DIR argument only; the --from-file paths still need converting. No effect on Linux/macOS.
+MSYS2_ARG_CONV_EXCL="--from-literal=DOCUMENTS_DIR=" \
 kubectl create configmap claim-adjudication-config \
   --namespace "$NAMESPACE" \
   --from-file=agents.yaml="${REPO_ROOT}/config/agents.yaml" \
   --from-file=tradeoff.yaml="${REPO_ROOT}/config/tradeoff.yaml" \
   --from-literal=APP_ENV=aws \
   --from-literal=USE_REDIS=true \
+  --from-literal=REDIS_URL="rediss://${REDIS_ENDPOINT}:6379/0" \
   --from-literal=USE_TEXTRACT=true \
   --from-literal=USE_S3=true \
   --from-literal=USE_SECRETS_MANAGER=true \
@@ -50,7 +59,7 @@ kubectl create configmap claim-adjudication-config \
   --from-literal=RDS_SECRET_ARN="$RDS_SECRET_ARN" \
   --from-literal=AWS_REGION="$AWS_REGION" \
   --from-literal=SECRET_NAME_OPENAI="$OPENAI_SECRET_NAME" \
-  --from-literal=DOCUMENTS_DIR="s3://${DOCUMENTS_BUCKET}" \
+  --from-literal=DOCUMENTS_DIR="/tmp/documents" \
   --from-literal=DOCUMENTS_BUCKET="$DOCUMENTS_BUCKET" \
   --dry-run=client -o yaml \
   > "${REPO_ROOT}/k8s/configmap.yaml"
