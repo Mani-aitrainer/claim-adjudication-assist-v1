@@ -832,7 +832,23 @@ hand as shown in the next section.
 Runs, in order: delete the Ingress (releases the ALB) → delete any LoadBalancer Services →
 empty the S3 bucket (including versions) → delete ECR images → force-delete Secrets
 Manager secrets → `terraform init` + `terraform destroy` → delete leftover CloudWatch log
-groups → verify zero resources remain tagged `Project=claim-adjudication`.
+groups → (optional) delete the state backend → verify zero resources remain tagged
+`Project=claim-adjudication`.
+
+**Done with AWS for good, for example at the end of a training?** Delete the Terraform
+state backend from Step 3 as well (the S3 state bucket and DynamoDB lock table). Then
+nothing tagged with the project is left in the account. The next deploy must start again
+at Step 3:
+
+```powershell
+$env:DESTROY_STATE_BACKEND = "true"
+& $BASH -l ./scripts/destroy_all.sh
+Remove-Item env:DESTROY_STATE_BACKEND     # so a later run doesn't delete it by accident
+```
+
+Without that variable, the backend is kept (it costs cents a month) and the final check
+ignores it. The final check also ignores NAT gateways that are already `deleted`. AWS keeps
+listing those for about an hour after deletion.
 
 The Kubernetes steps self-skip when no cluster is reachable, so the same script works
 whether you deployed the full stack or stopped halfway.
@@ -895,9 +911,12 @@ This must come back empty before you re-run `terraform apply`. Anything listed h
 deleted by hand (or imported into state) first. `destroy_all.sh` runs this same check as
 its last step and exits non-zero if anything survives.
 
-**Keep the bootstrap state backend.** Don't destroy `infra/terraform/bootstrap` — the S3
-state bucket and DynamoDB lock table are meant to outlive the stack. Destroying them
-throws away the state file that tracks everything else.
+**Keep the bootstrap state backend while you still plan to redeploy.** The S3 state bucket
+and DynamoDB lock table are meant to outlive the stack. Deleting them throws away the
+state file that tracks everything else. Delete them only after `terraform destroy` has
+finished, with `DESTROY_STATE_BACKEND=true` (Step 16). Don't use `terraform destroy` in
+`infra/terraform/bootstrap` for this: its state is local to whoever ran bootstrap, so on
+anyone else's machine it reports `0 destroyed` and leaves both resources in place.
 
 ### Quick reference — command order
 
