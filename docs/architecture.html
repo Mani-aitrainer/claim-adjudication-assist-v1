@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Claim Adjudication on AWS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: blueprint sheet. Header, then the diagram with its numbered service key pinned
+   to the right corner, then two reading columns (claim flow | policy onboarding), then ops. */
+:root {
+  --bg: #F3F5F8;
+  --surface: #FFFFFF;
+  --sunk: #E9EDF2;
+  --ink: #15202B;
+  --ink-2: #4B5869;
+  --line: #CED6E0;
+  --req: #2457D6;
+  --pipe: #23894A;
+  --dep: #7C8796;
+  --k8s: #326CE5;
+  --warn-bg: #FFF4DB;
+  --warn-ink: #7A4B00;
+  --warn-line: #E9C46A;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  /* AWS architecture-icon category colors (same in both themes; glyphs are white) */
+  --c-net: #8C4FFF; --c-compute: #ED7100; --c-ml: #01A88D; --c-db: #C925D1;
+  --c-sec: #DD344C; --c-store: #7AA116; --c-mgmt: #E7157B;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E141B; --surface: #151D27; --sunk: #1B2531; --ink: #E5EAF1; --ink-2: #9BA8B9;
+    --line: #2B3747; --req: #74A3FF; --pipe: #5CC985; --dep: #8D98A8; --k8s: #79A3F2;
+    --warn-bg: #2E2410; --warn-ink: #F3CF85; --warn-line: #6B5420; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E141B; --surface: #151D27; --sunk: #1B2531; --ink: #E5EAF1; --ink-2: #9BA8B9;
+  --line: #2B3747; --req: #74A3FF; --pipe: #5CC985; --dep: #8D98A8; --k8s: #79A3F2;
+  --warn-bg: #2E2410; --warn-ink: #F3CF85; --warn-line: #6B5420; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--body);
+}
+.wrap {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 28px;
+}
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: 0.86em; background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- header ---------- */
+.top { display: grid; gap: 12px; }
+.eyebrow {
+  font: 600 11.5px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+h1 {
+  font-size: clamp(30px, 4.2vw, 46px);
+  font-weight: 800;
+  font-stretch: 80%;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
+}
+.lede { max-width: 72ch; color: var(--ink-2); margin: 0; }
+.specs { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 4px; }
+.spec {
+  font: 500 12px/1 var(--mono);
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+}
+.spec b { color: var(--ink); font-weight: 600; }
+
+/* ---------- board: diagram + key ---------- */
+.board {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+.board-main { min-width: 0; padding: 16px 16px 10px; display: grid; gap: 10px; border-right: 1px solid var(--line); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filters .lbl { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-right: 4px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 13px/1 var(--body);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--ink-2); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip:focus-visible, .key li:focus-visible, .copy:focus-visible { outline: 2px solid var(--req); outline-offset: 2px; }
+.swatch { width: 22px; height: 0; border-top: 3px solid currentColor; }
+.swatch.req { color: var(--req); }
+.swatch.pipe { color: var(--pipe); border-top-style: dashed; }
+.swatch.dep { color: var(--dep); border-top-style: dotted; }
+.chip[aria-pressed="true"] .swatch.req,
+.chip[aria-pressed="true"] .swatch.pipe,
+.chip[aria-pressed="true"] .swatch.dep { filter: brightness(1.25); }
+
+.diagram { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.diagram svg { display: block; width: 100%; min-width: 1000px; height: auto; }
+.hint { font-size: 12px; color: var(--ink-2); margin: 0; }
+
+/* svg styling */
+.zone-region { fill: var(--bg); stroke: var(--ink-2); stroke-width: 1.2; }
+.zone-vpc { fill: none; stroke: var(--c-net); stroke-width: 1.6; stroke-dasharray: 7 5; }
+.zone-pub { fill: color-mix(in srgb, var(--c-store) 9%, transparent); stroke: none; }
+.zone-priv { fill: color-mix(in srgb, var(--k8s) 7%, transparent); stroke: none; }
+.zone-eks { fill: var(--surface); stroke: var(--c-compute); stroke-width: 1.4; }
+.zone-lbl { font: 600 10.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; fill: var(--ink-2); }
+.zone-lbl.strong { fill: var(--ink); }
+.tile-aws { stroke: none; }
+.tile-k8s { fill: var(--surface); stroke: var(--k8s); stroke-width: 2; }
+.tile-ext { fill: var(--surface); stroke: var(--ink-2); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.g-aws { color: #FFFFFF; }
+.g-k8s { color: var(--k8s); }
+.g-ext { color: var(--ink); }
+.badge circle { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+.badge text { fill: var(--surface); font: 700 11px var(--mono); text-anchor: middle; }
+.nlbl { font: 600 12px var(--display); fill: var(--ink); }
+.nsub { font: 400 10.5px var(--mono); fill: var(--ink-2); }
+.mid { text-anchor: middle; }
+.end { text-anchor: end; }
+.inlbl { font: 600 12.5px var(--display); fill: var(--ink); }
+
+.edge path { fill: none; stroke-width: 2.2; stroke-linejoin: round; }
+.edge.req path { stroke: var(--req); }
+.edge.pipe path { stroke: var(--pipe); stroke-dasharray: 7 5; }
+.edge.dep path { stroke: var(--dep); stroke-dasharray: 2 4; stroke-linecap: round; }
+.mk-req { fill: var(--req); } .mk-pipe { fill: var(--pipe); } .mk-dep { fill: var(--dep); }
+.pill rect { stroke: var(--surface); stroke-width: 2; }
+.pill text { font: 700 10px var(--mono); fill: #FFFFFF; text-anchor: middle; }
+.pill.req rect { fill: var(--req); } .pill.pipe rect { fill: var(--pipe); } .pill.dep rect { fill: var(--dep); }
+:root[data-theme="dark"] .pill text { fill: #0E141B; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pill text { fill: #0E141B; } }
+
+svg .node, svg .edge, svg .pill { transition: opacity .2s ease; }
+svg.filtering .dim { opacity: .12; }
+svg .node.hl .badge circle { fill: var(--req); }
+svg .node.hl rect:first-child { filter: drop-shadow(0 0 6px var(--req)); }
+
+/* key (legend) */
+.key-wrap { padding: 16px 16px 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.key-wrap h2 { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+.key { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.key-group { font: 600 10.5px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); margin: 10px 0 4px; }
+.key-group:first-of-type { margin-top: 0; }
+.key li {
+  display: grid;
+  grid-template-columns: 22px 12px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: default;
+}
+.key li:hover, .key li.hl { background: var(--sunk); }
+.num {
+  display: inline-grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--ink); color: var(--surface);
+  font: 700 10.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.dot { width: 12px; height: 12px; border-radius: 3px; margin-top: 4px; }
+.dot.k8s { background: var(--surface); border: 2px solid var(--k8s); }
+.dot.ext { background: var(--surface); border: 1.5px dashed var(--ink-2); }
+.key .nm { font: 600 13px/1.3 var(--body); }
+.key .rl { display: block; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
+.styles { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); }
+.styles div { display: flex; align-items: center; gap: 8px; }
+.styles .dot { margin-top: 0; }
+
+/* ---------- reading columns ---------- */
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.panel { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.panel h2 { font-size: 24px; font-weight: 800; font-stretch: 85%; }
+.panel > p { margin: 0; color: var(--ink-2); max-width: 66ch; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.steps li {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.steps li:last-child { border-bottom: 1px solid var(--line); }
+.tag {
+  justify-self: start;
+  font: 700 11px/1 var(--mono);
+  color: #FFFFFF;
+  border-radius: 999px;
+  padding: 5px 7px;
+  margin-top: 2px;
+}
+.tag.req { background: var(--req); } .tag.pipe { background: var(--pipe); } .tag.dep { background: var(--dep); }
+.tag.start { background: var(--ink-2); }
+:root[data-theme="dark"] .tag { color: #0E141B; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag { color: #0E141B; } }
+.steps p { margin: 0; }
+.steps .what { font-weight: 600; }
+.ref {
+  display: inline-grid; place-items: center;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 9px;
+  background: var(--ink); color: var(--surface);
+  font: 700 10px/1 var(--mono);
+  vertical-align: 1px;
+  cursor: default;
+}
+
+/* agent strip */
+.agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px; border-radius: 10px; background: var(--sunk); }
+.agents .a { font: 600 12px/1 var(--mono); padding: 7px 9px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+.agents .arr { color: var(--ink-2); font: 400 13px/1 var(--mono); }
+.agents .loop { font: 500 11px/1 var(--mono); color: var(--req); }
+.agents-cap { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+
+/* callout + code */
+.callout {
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+.callout strong { font-family: var(--display); font-size: 15px; }
+.callout p { margin: 0; }
+.callout code { background: color-mix(in srgb, var(--warn-line) 35%, transparent); color: inherit; }
+.callout ul { margin: 2px 0 0; padding-left: 18px; }
+.code {
+  position: relative;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-width: 0;
+}
+.code pre {
+  margin: 0;
+  padding: 14px 14px 14px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.code .c { color: var(--ink-2); }
+.copy {
+  position: absolute; top: 8px; right: 8px;
+  font: 600 11.5px/1 var(--body);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); }
+.notes b { color: var(--ink); font-weight: 600; }
+
+.limits { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.limits li { padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.limits li:last-child { border-bottom: 1px solid var(--line); }
+.limits b { font-weight: 600; }
+.limits span { color: var(--ink-2); font-size: 14px; }
+
+footer { font-size: 12px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 1080px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .board-main { border-right: 0; border-bottom: 1px solid var(--line); }
+  .key { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 12px; }
+  .key-group { grid-column: 1 / -1; }
+}
+@media (max-width: 820px) {
+  .cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  svg .node, svg .edge, svg .pill { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">claim-adjudication-assist-v1 · architecture one-pager</div>
+  <h1>Claim Adjudication on AWS</h1>
+  <p class="lede">How a claim PDF travels from the browser through the load balancer, the agent pods and every AWS service they call, and how policy documents get from S3 into the vector store. Numbers on the diagram match the service key on the right. Blue lines are a claim request, green dashed lines are policy onboarding, grey dotted lines are build and deploy.</p>
+  <div class="specs">
+    <span class="spec">region <b>us-east-1</b></span>
+    <span class="spec">VPC <b>10.42.0.0/16</b> · 2 AZs</span>
+    <span class="spec">EKS <b>2× t3.medium</b></span>
+    <span class="spec">RDS <b>PostgreSQL 16</b> · db.t4g.micro</span>
+    <span class="spec">Redis <b>7.1</b> · cache.t4g.micro · TLS</span>
+    <span class="spec">HPA <b>2–5 pods</b> @ 70% CPU</span>
+    <span class="spec">LLM <b>gpt-4.1-mini</b></span>
+    <span class="spec">budget alert <b>$50/mo</b></span>
+  </div>
+</header>
+
+<section class="board" aria-label="Architecture diagram and service key">
+  <div class="board-main">
+    <div class="filters" role="group" aria-label="Highlight a flow">
+      <span class="lbl">Show</span>
+      <button type="button" class="chip" id="f-all" data-flow="all" aria-pressed="true">Everything</button>
+      <button type="button" class="chip" id="f-req" data-flow="req" aria-pressed="false"><span class="swatch req"></span>Claim request</button>
+      <button type="button" class="chip" id="f-pipe" data-flow="pipe" aria-pressed="false"><span class="swatch pipe"></span>Policy onboarding</button>
+      <button type="button" class="chip" id="f-dep" data-flow="dep" aria-pressed="false"><span class="swatch dep"></span>Build &amp; deploy</button>
+    </div>
+
+    <div class="diagram">
+<svg id="arch" viewBox="0 0 1260 800" role="img" aria-labelledby="arch-title">
+  <title id="arch-title">AWS architecture: browser to ALB to EKS app pods, which call ElastiCache, RDS, Textract, Secrets Manager and OpenAI; policy PDFs flow from S3 through the seed job into RDS.</title>
+  <defs>
+    <marker id="m-req" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-req" d="M0 0 L10 5 L0 10 Z"/></marker>
+    <marker id="m-pipe" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-pipe" d="M0 0 L10 5 L0 10 Z"/></marker>
+    <marker id="m-dep" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-dep" d="M0 0 L10 5 L0 10 Z"/></marker>
+
+    <symbol id="g-alb" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6.5" cy="12" r="3"/><path d="M9.5 12 L17 6 M9.5 12 H17 M9.5 12 L17 18"/><circle cx="19" cy="6" r="1.8"/><circle cx="19" cy="12" r="1.8"/><circle cx="19" cy="18" r="1.8"/></g></symbol>
+    <symbol id="g-nat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="7" height="14" rx="1.2"/><path d="M7 12 H20 M16 8 L20 12 L16 16"/></g></symbol>
+    <symbol id="g-eks" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M12 2.5 L20.5 7.25 V16.75 L12 21.5 L3.5 16.75 V7.25 Z"/><path d="M9.5 8 V16 M9.5 12.2 L14.5 8 M10.6 11.3 L14.8 16"/></g></symbol>
+    <symbol id="g-pod" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3 L20 7.5 V16.5 L12 21 L4 16.5 V7.5 Z"/><path d="M4 7.5 L12 12 L20 7.5 M12 12 V21"/></g></symbol>
+    <symbol id="g-ecr" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="4" width="16" height="4.5" rx=".8"/><rect x="4" y="9.75" width="16" height="4.5" rx=".8"/><rect x="4" y="15.5" width="16" height="4.5" rx=".8"/><path d="M8 4 V8.5 M12 9.75 V14.25 M16 15.5 V20"/></g></symbol>
+    <symbol id="g-textract" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M6 2.8 H14 L18 6.8 V21.2 H6 Z"/><path d="M14 2.8 V6.8 H18"/><path d="M8.8 11 H15.2 M8.8 14 H15.2 M8.8 17 H12.6"/></g></symbol>
+    <symbol id="g-cache" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><ellipse cx="12" cy="5.8" rx="7" ry="2.6"/><path d="M5 5.8 V18.2 A7 2.6 0 0 0 19 18.2 V5.8"/><path d="M13.2 9.2 L10.2 13.6 H13.4 L11.2 17.6" stroke-linecap="round"/></g></symbol>
+    <symbol id="g-db" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="5.8" rx="7" ry="2.6"/><path d="M5 5.8 V18.2 A7 2.6 0 0 0 19 18.2 V5.8"/><path d="M5 10 A7 2.6 0 0 0 19 10 M5 14.1 A7 2.6 0 0 0 19 14.1"/></g></symbol>
+    <symbol id="g-secret" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5.5" y="10.5" width="13" height="10" rx="1.6"/><path d="M8.2 10.5 V7.6 A3.8 3.8 0 0 1 15.8 7.6 V10.5"/><path d="M12 14.2 V16.8" stroke-linecap="round"/></g></symbol>
+    <symbol id="g-iam" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M12 2.8 L19 5.8 V11 C19 15.6 16 19.2 12 21.2 C8 19.2 5 15.6 5 11 V5.8 Z"/><path d="M8.8 11.8 L11.1 14.1 L15.4 9.8"/></g></symbol>
+    <symbol id="g-s3" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.5" ry="2.6"/><path d="M4.5 6 L6.8 18.6 A5.2 1.9 0 0 0 17.2 18.6 L19.5 6"/></g></symbol>
+    <symbol id="g-logs" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 6 H13 M4 10 H10 M4 14 H8"/><circle cx="15" cy="14" r="4.2"/><path d="M18 17 L20.8 19.8"/></g></symbol>
+    <symbol id="g-budget" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M14.8 8.8 C14.1 8 13.1 7.6 12 7.6 C10.4 7.6 9.3 8.4 9.3 9.6 C9.3 12.5 14.7 11.4 14.7 14.4 C14.7 15.7 13.6 16.5 12 16.5 C10.8 16.5 9.8 16.1 9.1 15.3 M12 5.8 V18.2"/></g></symbol>
+    <symbol id="g-state" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5 L20 7.6 L12 11.7 L4 7.6 Z"/><path d="M4 12 L12 16.1 L20 12 M4 16.3 L12 20.4 L20 16.3"/></g></symbol>
+    <symbol id="g-job" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10 8.3 L16 12 L10 15.7 Z"/></g></symbol>
+    <symbol id="g-migrate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 H14 M4 11 H14 M4 15.5 H10"/><path d="M18 6 V18 M15.3 15.3 L18 18 L20.7 15.3"/></g></symbol>
+    <symbol id="g-ctrl" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7 H20 M4 12 H20 M4 17 H20"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15.5" cy="12" r="2" fill="currentColor"/><circle cx="11" cy="17" r="2" fill="currentColor"/></g></symbol>
+    <symbol id="g-metrics" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5 H20.5"/><path d="M4 16 L9 10.5 L13 13.5 L20 5.5"/><circle cx="20" cy="5.5" r="1.3" fill="currentColor"/></g></symbol>
+    <symbol id="g-ai" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4.5 5.5 H19.5 V15.5 H11 L7 19 V15.5 H4.5 Z"/><circle cx="8.7" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.3" cy="10.5" r="1" fill="currentColor"/></g></symbol>
+    <symbol id="g-browser" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="1.8"/><path d="M3 8.8 H21"/><circle cx="5.8" cy="6.7" r=".6" fill="currentColor"/><circle cx="8" cy="6.7" r=".6" fill="currentColor"/><path d="M7 13 H17 M7 16 H13" stroke-linecap="round"/></g></symbol>
+    <symbol id="g-laptop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="4.5" y="5" width="15" height="10.5" rx="1.2"/><path d="M2.5 18.8 H21.5"/><path d="M8 8.6 L10.2 10.3 L8 12 M11.6 12 H14.8"/></g></symbol>
+  </defs>
+
+  <!-- zones -->
+  <text class="zone-lbl" x="86" y="34" text-anchor="middle">Internet</text>
+  <text class="zone-lbl" x="1176" y="34" text-anchor="middle">Internet</text>
+  <rect class="zone-region" x="170" y="14" width="920" height="772" rx="14"/>
+  <text class="zone-lbl strong" x="188" y="38">AWS Cloud · us-east-1</text>
+  <rect class="zone-vpc" x="190" y="50" width="610" height="690" rx="10"/>
+  <text class="zone-lbl strong" x="208" y="72">VPC 10.42.0.0/16</text>
+  <g class="badge" transform="translate(338,68)"><circle r="9"/><text y="3.8">2</text></g>
+  <rect class="zone-pub" x="206" y="82" width="578" height="118" rx="7"/>
+  <text class="zone-lbl" x="480" y="100" text-anchor="middle">Public subnets · 2 AZs</text>
+  <rect class="zone-priv" x="206" y="214" width="578" height="512" rx="7"/>
+  <text class="zone-lbl" x="772" y="232" text-anchor="end">Private subnets · 2 AZs</text>
+  <rect class="zone-eks" x="226" y="246" width="542" height="300" rx="9"/>
+  <text class="zone-lbl strong" x="292" y="268">EKS cluster · claim-adjudication-eks</text>
+  <text class="zone-lbl" x="860" y="72">Regional services</text>
+
+  <!-- ===== edges (drawn under nodes) ===== -->
+  <!-- claim request -->
+  <g class="edge req" data-flow="req"><path d="M114 146 H246" marker-start="url(#m-req)" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req"><path d="M276 174 V292" marker-start="url(#m-req)" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req"><path d="M276 350 V596" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req"><path d="M376 350 V626 H466" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req pipe"><path d="M376 296 V278 H666 V176"/></g>
+  <g class="edge req" data-flow="req pipe"><path d="M692 146 H820 M820 112 V356"/></g>
+  <g class="edge req" data-flow="req"><path d="M820 112 H856" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req"><path d="M820 252 H856" marker-end="url(#m-req)"/></g>
+  <g class="edge req" data-flow="req pipe"><path d="M820 356 H1146" marker-end="url(#m-req)"/></g>
+  <!-- policy onboarding -->
+  <g class="edge pipe" data-flow="pipe"><path d="M114 626 H148 V756 H840 V470 H856" marker-end="url(#m-pipe)"/></g>
+  <g class="edge pipe" data-flow="pipe"><path d="M114 612 H160 V708 H730 V468 H696" marker-end="url(#m-pipe)"/></g>
+  <g class="edge pipe" data-flow="pipe"><path d="M858 446 H696" marker-end="url(#m-pipe)"/></g>
+  <g class="edge pipe" data-flow="pipe"><path d="M666 428 V282"/></g>
+  <g class="edge pipe" data-flow="pipe"><path d="M638 480 H580 V640 H526" marker-end="url(#m-pipe)"/></g>
+  <!-- build & deploy / ops -->
+  <g class="edge dep" data-flow="dep"><path d="M114 640 H136 V770 H848 V586 H856" marker-end="url(#m-dep)"/></g>
+  <g class="edge dep" data-flow="dep"><path d="M496 484 V596" marker-end="url(#m-dep)"/></g>
+  <g class="edge dep" data-flow="dep"><path d="M392 322 H446" marker-start="url(#m-dep)"/></g>
+
+  <!-- step pills -->
+  <g class="pill req" data-flow="req" transform="translate(146,146)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R1</text></g>
+  <g class="pill req" data-flow="req" transform="translate(214,146)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R7</text></g>
+  <g class="pill req" data-flow="req" transform="translate(276,240)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R2</text></g>
+  <g class="pill req" data-flow="req" transform="translate(276,470)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R3</text></g>
+  <g class="pill req" data-flow="req" transform="translate(376,520)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R5</text></g>
+  <g class="pill req" data-flow="req" transform="translate(838,112)"><rect x="-11" y="-9" width="22" height="18" rx="9"/><text y="3.6">S</text></g>
+  <g class="pill req" data-flow="req" transform="translate(838,252)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R4</text></g>
+  <g class="pill req" data-flow="req" transform="translate(1118,356)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">R6</text></g>
+  <g class="pill pipe" data-flow="pipe" transform="translate(420,756)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">P1</text></g>
+  <g class="pill pipe" data-flow="pipe" transform="translate(300,708)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">P2</text></g>
+  <g class="pill pipe" data-flow="pipe" transform="translate(826,446)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">P3</text></g>
+  <g class="pill pipe" data-flow="pipe" transform="translate(666,396)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">P4</text></g>
+  <g class="pill pipe" data-flow="pipe" transform="translate(580,560)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">P5</text></g>
+  <g class="pill dep" data-flow="dep" transform="translate(640,770)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">D1</text></g>
+  <g class="pill dep" data-flow="dep" transform="translate(496,540)"><rect x="-13" y="-9" width="26" height="18" rx="9"/><text y="3.6">D2</text></g>
+
+  <!-- ===== nodes ===== -->
+  <!-- actors -->
+  <g class="node" data-flows="req" transform="translate(60,120)">
+    <rect class="tile-ext" width="52" height="52" rx="10"/>
+    <use href="#g-browser" class="g-ext" x="10" y="10" width="32" height="32"/>
+    <text class="nlbl mid" x="26" y="70">Claims reviewer</text>
+    <text class="nsub mid" x="26" y="84">ui/index.html</text>
+  </g>
+  <g class="node" data-flows="pipe dep" transform="translate(60,600)">
+    <rect class="tile-ext" width="52" height="52" rx="10"/>
+    <use href="#g-laptop" class="g-ext" x="10" y="10" width="32" height="32"/>
+    <text class="nlbl mid" x="26" y="70">Platform engineer</text>
+    <text class="nsub mid" x="26" y="84">aws · kubectl · docker</text>
+  </g>
+
+  <!-- 1 ALB -->
+  <g class="node" data-n="1" data-flows="req" transform="translate(250,120)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#8C4FFF"/>
+    <use href="#g-alb" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">1</text></g>
+    <text class="nlbl" x="66" y="24">Application Load Balancer</text>
+    <text class="nsub" x="66" y="38">internet-facing · HTTP :80</text>
+  </g>
+  <!-- 3 NAT -->
+  <g class="node" data-n="3" data-flows="req pipe" transform="translate(640,120)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#8C4FFF"/>
+    <use href="#g-nat" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">3</text></g>
+    <text class="nlbl end" x="-12" y="24">NAT Gateway</text>
+    <text class="nsub end" x="-12" y="38">all outbound calls</text>
+  </g>
+  <!-- 4 EKS -->
+  <g class="node" data-n="4" data-flows="req pipe dep" transform="translate(704,262)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#ED7100"/>
+    <use href="#g-eks" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">4</text></g>
+    <text class="nlbl mid" x="26" y="70">Amazon EKS</text>
+    <text class="nsub mid" x="26" y="84">2 nodes</text>
+  </g>
+  <!-- 15 App pods (wide tile) -->
+  <g class="node" data-n="15" data-flows="req" transform="translate(250,296)">
+    <rect class="tile-k8s" width="140" height="52" rx="10"/>
+    <use href="#g-pod" class="g-k8s" x="8" y="10" width="32" height="32"/>
+    <text class="inlbl" x="46" y="23">App pods ×2</text>
+    <text class="nsub" x="46" y="38">FastAPI · :8000</text>
+    <g class="badge" transform="translate(140,0)"><circle r="10"/><text y="3.8">15</text></g>
+  </g>
+  <!-- 19 Prometheus + Grafana -->
+  <g class="node" data-n="19" data-flows="dep" transform="translate(450,296)">
+    <rect class="tile-k8s" width="52" height="52" rx="10"/>
+    <use href="#g-metrics" class="g-k8s" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">19</text></g>
+    <text class="nlbl mid" x="26" y="70">Prometheus</text>
+    <text class="nsub mid" x="26" y="84">+ Grafana</text>
+  </g>
+  <!-- 18 LB Controller -->
+  <g class="node" data-n="18" data-flows="req" transform="translate(560,296)">
+    <rect class="tile-k8s" width="52" height="52" rx="10"/>
+    <use href="#g-ctrl" class="g-k8s" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">18</text></g>
+    <text class="nlbl mid" x="26" y="70">LB Controller</text>
+    <text class="nsub mid" x="26" y="84">Ingress → ALB</text>
+  </g>
+  <!-- 17 migrate job -->
+  <g class="node" data-n="17" data-flows="dep" transform="translate(470,430)">
+    <rect class="tile-k8s" width="52" height="52" rx="10"/>
+    <use href="#g-migrate" class="g-k8s" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">17</text></g>
+    <text class="nlbl" x="64" y="22">db-migrate</text>
+    <text class="nsub" x="64" y="36">Job</text>
+  </g>
+  <!-- 16 seed job -->
+  <g class="node" data-n="16" data-flows="pipe" transform="translate(640,430)">
+    <rect class="tile-k8s" width="52" height="52" rx="10"/>
+    <use href="#g-job" class="g-k8s" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">16</text></g>
+    <text class="nlbl mid" x="26" y="70">seed-data Job</text>
+    <text class="nsub mid" x="26" y="84">ingest policies</text>
+  </g>
+  <!-- 7 ElastiCache -->
+  <g class="node" data-n="7" data-flows="req" transform="translate(250,600)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#C925D1"/>
+    <use href="#g-cache" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">7</text></g>
+    <text class="nlbl mid" x="26" y="70">ElastiCache</text>
+    <text class="nsub mid" x="26" y="84">Redis · OCR cache</text>
+  </g>
+  <!-- 8 RDS -->
+  <g class="node" data-n="8" data-flows="req pipe dep" transform="translate(470,600)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#C925D1"/>
+    <use href="#g-db" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">8</text></g>
+    <text class="nlbl mid" x="26" y="70">RDS PostgreSQL</text>
+    <text class="nsub mid" x="26" y="84">pgvector · state</text>
+  </g>
+
+  <!-- regional column A -->
+  <g class="node" data-n="9" data-flows="req" transform="translate(860,86)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#DD344C"/>
+    <use href="#g-secret" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">9</text></g>
+    <text class="nlbl mid" x="26" y="70">Secrets Manager</text>
+    <text class="nsub mid" x="26" y="84">OpenAI key · DB pw</text>
+  </g>
+  <g class="node" data-n="6" data-flows="req" transform="translate(860,226)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#01A88D"/>
+    <use href="#g-textract" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">6</text></g>
+    <text class="nlbl mid" x="26" y="70">Textract</text>
+    <text class="nsub mid" x="26" y="84">OCR · forms+tables</text>
+  </g>
+  <g class="node" data-n="11" data-flows="pipe" transform="translate(860,430)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#7AA116"/>
+    <use href="#g-s3" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">11</text></g>
+    <text class="nlbl mid" x="26" y="70">S3 documents</text>
+    <text class="nsub mid" x="26" y="84">policies/</text>
+  </g>
+  <g class="node" data-n="5" data-flows="dep" transform="translate(860,560)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#ED7100"/>
+    <use href="#g-ecr" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">5</text></g>
+    <text class="nlbl mid" x="26" y="70">ECR</text>
+    <text class="nsub mid" x="26" y="84">image :latest</text>
+  </g>
+  <!-- regional column B -->
+  <g class="node" data-n="10" data-flows="req pipe" transform="translate(980,86)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#DD344C"/>
+    <use href="#g-iam" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">10</text></g>
+    <text class="nlbl mid" x="26" y="70">IAM · IRSA</text>
+    <text class="nsub mid" x="26" y="84">pod roles</text>
+  </g>
+  <g class="node" data-n="12" data-flows="dep" transform="translate(980,226)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#E7157B"/>
+    <use href="#g-logs" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">12</text></g>
+    <text class="nlbl mid" x="26" y="70">CloudWatch Logs</text>
+    <text class="nsub mid" x="26" y="84">EKS · RDS logs</text>
+  </g>
+  <g class="node" data-n="14" data-flows="dep" transform="translate(980,430)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#7AA116"/>
+    <use href="#g-state" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">14</text></g>
+    <text class="nlbl mid" x="26" y="70">Terraform state</text>
+    <text class="nsub mid" x="26" y="84">S3 + DynamoDB</text>
+  </g>
+  <g class="node" data-n="13" data-flows="dep" transform="translate(980,560)">
+    <rect class="tile-aws" width="52" height="52" rx="10" fill="#7AA116"/>
+    <use href="#g-budget" class="g-aws" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">13</text></g>
+    <text class="nlbl mid" x="26" y="70">AWS Budgets</text>
+    <text class="nsub mid" x="26" y="84">$50/mo alert</text>
+  </g>
+  <!-- 20 OpenAI -->
+  <g class="node" data-n="20" data-flows="req pipe" transform="translate(1150,330)">
+    <rect class="tile-ext" width="52" height="52" rx="10"/>
+    <use href="#g-ai" class="g-ext" x="10" y="10" width="32" height="32"/>
+    <g class="badge" transform="translate(52,0)"><circle r="10"/><text y="3.8">20</text></g>
+    <text class="nlbl mid" x="26" y="70">OpenAI API</text>
+    <text class="nsub mid" x="26" y="84">LLM + embeddings</text>
+  </g>
+</svg>
+    </div>
+    <p class="hint">Pick a flow above to highlight it. Hover a row in the service key to find that service in the diagram. On a phone, scroll the diagram sideways.</p>
+  </div>
+
+  <aside class="key-wrap" aria-label="Service key">
+    <h2>Service key</h2>
+    <ol class="key" id="key">
+      <li class="key-group" aria-hidden="true">AWS managed services</li>
+      <li tabindex="0" data-n="1"><span class="num">1</span><span class="dot" style="background:var(--c-net)"></span><span><span class="nm">Application Load Balancer</span><span class="rl">Public entry point on HTTP :80. Created by the LB Controller from the Ingress.</span></span></li>
+      <li tabindex="0" data-n="2"><span class="num">2</span><span class="dot" style="background:var(--c-net)"></span><span><span class="nm">Amazon VPC</span><span class="rl">10.42.0.0/16, 2 public + 2 private subnets in 2 AZs.</span></span></li>
+      <li tabindex="0" data-n="3"><span class="num">3</span><span class="dot" style="background:var(--c-net)"></span><span><span class="nm">NAT Gateway</span><span class="rl">One NAT. Every outbound call from pods (Textract, Secrets Manager, OpenAI) leaves here.</span></span></li>
+      <li tabindex="0" data-n="4"><span class="num">4</span><span class="dot" style="background:var(--c-compute)"></span><span><span class="nm">Amazon EKS</span><span class="rl">Managed Kubernetes, 2× t3.medium worker nodes in the private subnets.</span></span></li>
+      <li tabindex="0" data-n="5"><span class="num">5</span><span class="dot" style="background:var(--c-compute)"></span><span><span class="nm">Amazon ECR</span><span class="rl">Holds the app image <code>claim-adjudication:latest</code>, scanned on push.</span></span></li>
+      <li tabindex="0" data-n="6"><span class="num">6</span><span class="dot" style="background:var(--c-ml)"></span><span><span class="nm">Amazon Textract</span><span class="rl">OCR. <code>AnalyzeDocument</code> with FORMS + TABLES on the claim PDF.</span></span></li>
+      <li tabindex="0" data-n="7"><span class="num">7</span><span class="dot" style="background:var(--c-db)"></span><span><span class="nm">ElastiCache for Redis</span><span class="rl">Redis 7.1 with TLS. Caches OCR results by file hash.</span></span></li>
+      <li tabindex="0" data-n="8"><span class="num">8</span><span class="dot" style="background:var(--c-db)"></span><span><span class="nm">RDS for PostgreSQL</span><span class="rl">PG 16 + pgvector: policy chunks, run checkpoints, long-term memory, decisions.</span></span></li>
+      <li tabindex="0" data-n="9"><span class="num">9</span><span class="dot" style="background:var(--c-sec)"></span><span><span class="nm">Secrets Manager</span><span class="rl">OpenAI API key and the RDS master password, read at pod start.</span></span></li>
+      <li tabindex="0" data-n="10"><span class="num">10</span><span class="dot" style="background:var(--c-sec)"></span><span><span class="nm">IAM roles for service accounts</span><span class="rl">Pods get AWS access through IRSA (OIDC). No AWS keys live in the cluster.</span></span></li>
+      <li tabindex="0" data-n="11"><span class="num">11</span><span class="dot" style="background:var(--c-store)"></span><span><span class="nm">Amazon S3 (documents)</span><span class="rl">The <code>policies/</code> prefix is the source for the seed job.</span></span></li>
+      <li tabindex="0" data-n="12"><span class="num">12</span><span class="dot" style="background:var(--c-mgmt)"></span><span><span class="nm">CloudWatch Logs</span><span class="rl">EKS control-plane and RDS log groups.</span></span></li>
+      <li tabindex="0" data-n="13"><span class="num">13</span><span class="dot" style="background:var(--c-store)"></span><span><span class="nm">AWS Budgets</span><span class="rl">Emails an alert when monthly spend passes $50.</span></span></li>
+      <li tabindex="0" data-n="14"><span class="num">14</span><span class="dot" style="background:var(--c-store)"></span><span><span class="nm">Terraform state</span><span class="rl">S3 state bucket + DynamoDB lock table, from the one-time bootstrap.</span></span></li>
+      <li class="key-group" aria-hidden="true">In your EKS cluster</li>
+      <li tabindex="0" data-n="15"><span class="num">15</span><span class="dot k8s"></span><span><span class="nm">App pods</span><span class="rl">FastAPI + LangGraph agents on :8000. HPA scales 2–5 pods.</span></span></li>
+      <li tabindex="0" data-n="16"><span class="num">16</span><span class="dot k8s"></span><span><span class="nm">seed-data Job</span><span class="rl">Downloads policies from S3, chunks, embeds, writes to pgvector.</span></span></li>
+      <li tabindex="0" data-n="17"><span class="num">17</span><span class="dot k8s"></span><span><span class="nm">db-migrate Job</span><span class="rl">Creates the tables in RDS before the app starts.</span></span></li>
+      <li tabindex="0" data-n="18"><span class="num">18</span><span class="dot k8s"></span><span><span class="nm">AWS Load Balancer Controller</span><span class="rl">Watches the Ingress and creates the ALB.</span></span></li>
+      <li tabindex="0" data-n="19"><span class="num">19</span><span class="dot k8s"></span><span><span class="nm">Prometheus + Grafana</span><span class="rl">kube-prometheus-stack; scrapes the app's <code>/metrics</code>.</span></span></li>
+      <li class="key-group" aria-hidden="true">Outside AWS</li>
+      <li tabindex="0" data-n="20"><span class="num">20</span><span class="dot ext"></span><span><span class="nm">OpenAI API</span><span class="rl"><code>gpt-4.1-mini</code> for decisions, <code>text-embedding-3-small</code> for vectors.</span></span></li>
+    </ol>
+    <div class="styles">
+      <div><span class="dot" style="background:var(--c-compute)"></span>Solid tile: AWS managed service</div>
+      <div><span class="dot k8s"></span>Outlined tile: Kubernetes workload you deploy</div>
+      <div><span class="dot ext"></span>Dashed tile: outside AWS</div>
+    </div>
+  </aside>
+</section>
+
+<div class="cols">
+  <section class="panel" aria-labelledby="h-claim">
+    <h2 id="h-claim">A claim, end to end</h2>
+    <p>What happens between clicking <b>Adjudicate</b> in <code>ui/index.html</code> and seeing the decision badge. Step tags match the blue pills on the diagram.</p>
+    <ol class="steps">
+      <li><span class="tag start">S</span><p><span class="what">When a pod starts</span>, it gets AWS credentials through IRSA <span class="ref" data-n="10">10</span> and reads the OpenAI key and RDS password from Secrets Manager <span class="ref" data-n="9">9</span>.</p></li>
+      <li><span class="tag req">R1</span><p><span class="what">The browser uploads the PDF</span> with <code>POST /v1/claims/adjudicate</code> to the ALB <span class="ref" data-n="1">1</span> on port 80, then keeps the connection open to read a Server-Sent Events stream.</p></li>
+      <li><span class="tag req">R2</span><p><span class="what">The ALB forwards to one app pod</span> <span class="ref" data-n="15">15</span> on :8000, straight to the pod IP. It only sends traffic to pods passing <code>/healthz</code>.</p></li>
+      <li><span class="tag req">R3</span><p><span class="what">The pod saves the file</span> to <code>/tmp/documents/&lt;run_id&gt;/</code> and starts the agent graph. Intake looks up <code>ocr:&lt;sha256 of file&gt;</code> in Redis <span class="ref" data-n="7">7</span>.</p></li>
+      <li><span class="tag req">R4</span><p><span class="what">On a cache miss, Textract reads the PDF</span> <span class="ref" data-n="6">6</span> through the NAT gateway <span class="ref" data-n="3">3</span>. The result goes back into Redis, so the same file is never OCR'd twice.</p></li>
+      <li><span class="tag req">R5</span><p><span class="what">Validate, repair and adjudicate.</span> Adjudicate pulls the top 6 policy chunks from pgvector and the member's earlier decisions from long-term memory, both in RDS <span class="ref" data-n="8">8</span>. Every step saves a checkpoint to RDS, so a run can be resumed.</p></li>
+      <li><span class="tag req">R6</span><p><span class="what">The model decides.</span> Adjudicate and audit call OpenAI <span class="ref" data-n="20">20</span> (<code>gpt-4.1-mini</code>) through the NAT gateway. If audit rejects the reasoning, it sends the claim back for another attempt.</p></li>
+      <li><span class="tag req">R7</span><p><span class="what">The answer streams back.</span> Each step sends <code>node_start</code>/<code>node_end</code> events; the last event, <code>final</code>, carries the decision and its cost. The decision is also stored in RDS.</p></li>
+    </ol>
+    <div class="agents" aria-label="Agent graph inside the pod">
+      <span class="a">intake</span><span class="arr">→</span>
+      <span class="a">validate</span><span class="loop">⇄ repair ≤2</span><span class="arr">→</span>
+      <span class="a">fallback</span><span class="arr">→</span>
+      <span class="a">adjudicate</span><span class="loop">⇄ audit (heal)</span><span class="arr">→</span>
+      <span class="a">final</span>
+    </div>
+    <p class="agents-cap">The agent graph inside each pod. Fallback runs only when OCR fails or repair runs out of attempts, and then the decision is <code>MANUAL_REVIEW</code>.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-policy">
+    <h2 id="h-policy">Onboarding a policy</h2>
+    <p>Policy text reaches the agents only through the vector store in RDS. Changing it means uploading to S3, then running the seed job again. Step tags match the green pills on the diagram.</p>
+    <div class="callout" role="note">
+      <strong>The seed job reads exactly three file names</strong>
+      <p>It downloads everything under <code>s3://&lt;bucket&gt;/policies/</code>, but only ingests:</p>
+      <ul>
+        <li><code>policy_wording.pdf</code>: each clause starts with a <code>[Clause XX-N.N]</code> marker</li>
+        <li><code>member_handbook.pdf</code>: paragraphs headed <code>Related to clause XX-N.N</code></li>
+        <li><code>procedure_code_annexure.pdf</code>: the procedure-code table</li>
+      </ul>
+      <p>A file with any other name is downloaded and then ignored. To update a policy, replace the file with the same name. Adding a new kind of document needs a code change in <code>pipelines/data_pipeline.py</code>.</p>
+    </div>
+    <ol class="steps">
+      <li><span class="tag pipe">P1</span><p><span class="what">Upload the PDF</span> to the documents bucket <span class="ref" data-n="11">11</span> under <code>policies/</code>.</p></li>
+      <li><span class="tag pipe">P2</span><p><span class="what">Re-create the seed job</span> <span class="ref" data-n="16">16</span>. Jobs can't be re-run in place, so delete the old one first.</p></li>
+      <li><span class="tag pipe">P3</span><p><span class="what">An init container copies</span> <code>policies/</code> from S3 into the job's scratch volume, using the pod's IRSA role <span class="ref" data-n="10">10</span>.</p></li>
+      <li><span class="tag pipe">P4</span><p><span class="what">The job splits the text by clause</span> and embeds each chunk with OpenAI <span class="ref" data-n="20">20</span> <code>text-embedding-3-small</code>, through the NAT gateway <span class="ref" data-n="3">3</span>.</p></li>
+      <li><span class="tag pipe">P5</span><p><span class="what">Chunks are written to pgvector</span> in RDS <span class="ref" data-n="8">8</span>. The next claim retrieves the new text with no pod restart.</p></li>
+    </ol>
+    <div class="code">
+      <button type="button" class="copy" id="copy-seed" data-target="seed-cmds">Copy</button>
+<pre id="seed-cmds"><span class="c"># PowerShell, repo root, after Step 2 of the run guide ($IMAGE set)</span>
+$BUCKET = (Get-Content .tf-outputs.json | ConvertFrom-Json).documents_bucket.value
+aws s3 cp .\policy_wording.pdf "s3://$BUCKET/policies/"                     <span class="c"># P1</span>
+
+kubectl delete job seed-data -n claim-adjudication --ignore-not-found     <span class="c"># P2</span>
+(Get-Content k8s/job-seed-data.yaml -Raw) -replace '__ECR_REPOSITORY_URL__:__IMAGE_TAG__', $IMAGE | kubectl apply -f -
+
+kubectl wait --for=condition=complete job/seed-data -n claim-adjudication --timeout=900s
+kubectl logs job/seed-data -n claim-adjudication -c seed-data              <span class="c"># P3–P5 output + verify</span></pre>
+    </div>
+    <ul class="notes">
+      <li><b>Safe to re-run.</b> Chunks are deduplicated by content hash, so unchanged clauses are skipped.</li>
+      <li><b>Old wording is not removed.</b> Edited clauses are added as new chunks next to the old ones. The pipeline's <code>purge</code> command clears them, but there is no Kubernetes Job for it yet.</li>
+      <li><b>Costs a few cents.</b> Embedding is the only paid step.</li>
+    </ul>
+  </section>
+</div>
+
+<div class="cols">
+  <section class="panel" aria-labelledby="h-ops">
+    <h2 id="h-ops">Build, deploy and watch</h2>
+    <ol class="steps">
+      <li><span class="tag dep">D1</span><p><span class="what">Build and push the image</span> to ECR <span class="ref" data-n="5">5</span>. Nodes pull <code>:latest</code> every time a pod starts, so <code>kubectl rollout restart</code> picks up a new push.</p></li>
+      <li><span class="tag dep">D2</span><p><span class="what">Run the db-migrate Job</span> <span class="ref" data-n="17">17</span> once per database to create the tables in RDS <span class="ref" data-n="8">8</span>.</p></li>
+      <li><span class="tag dep">Ops</span><p><span class="what">Watch it.</span> Prometheus <span class="ref" data-n="19">19</span> scrapes agent latency, tokens and cost from <code>/metrics</code>; view them in Grafana. Cluster and database logs go to CloudWatch <span class="ref" data-n="12">12</span>, and Budgets <span class="ref" data-n="13">13</span> emails when spend passes $50.</p></li>
+      <li><span class="tag dep">IaC</span><p><span class="what">Terraform owns everything AWS</span> except the ALB, which the LB Controller <span class="ref" data-n="18">18</span> creates. State lives in S3 with a DynamoDB lock <span class="ref" data-n="14">14</span>. Teardown: <code>scripts/destroy_all.sh</code>.</p></li>
+    </ol>
+  </section>
+
+  <section class="panel" aria-labelledby="h-limits">
+    <h2 id="h-limits">Known limits on AWS today</h2>
+    <ul class="limits">
+      <li><b>No HTTPS and no login.</b><span>The ALB listens on plain HTTP :80 and the API has no authentication. Anyone with the URL can submit claims. Fine for a short training run, not for real data.</span></li>
+      <li><b>The knowledge graph is not loaded by the app.</b><span>The seed job builds it inside its own pod, and the app pods never see that file. On AWS, retrieval uses the vector half only.</span></li>
+      <li><b>Uploaded PDFs are temporary.</b><span>They live in the pod's <code>/tmp</code> and disappear on restart. A resume request can land on the other pod, which doesn't have the file.</span></li>
+      <li><b>Long silent steps get cut off.</b><span>The ALB closes a connection after 60 seconds without data.</span></li>
+      <li><b>Autoscaling can't scale yet.</b><span>The cluster has no metrics-server, so the HPA can't read CPU and stays at 2 pods.</span></li>
+    </ul>
+  </section>
+</div>
+
+<footer>Drawn from <code>infra/terraform/</code>, <code>k8s/</code>, <code>scripts/render_k8s_config.sh</code> and <code>pipelines/data_pipeline.py</code> on the main branch, 23 Oct 2026. Step-by-step commands: <code>docs/RUN_GUIDE.powershell.md</code>.</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var svg = document.getElementById("arch");
+  var chips = Array.prototype.slice.call(document.querySelectorAll(".chip[data-flow]"));
+  var flowEls = Array.prototype.slice.call(svg.querySelectorAll(".edge, .pill"));
+  var nodes = Array.prototype.slice.call(svg.querySelectorAll(".node"));
+
+  function setFlow(flow) {
+    chips.forEach(function (c) { c.setAttribute("aria-pressed", String(c.getAttribute("data-flow") === flow)); });
+    svg.classList.toggle("filtering", flow !== "all");
+    flowEls.forEach(function (el) {
+      var flows = (el.getAttribute("data-flow") || "").split(" ");
+      el.classList.toggle("dim", flow !== "all" && flows.indexOf(flow) === -1);
+    });
+    nodes.forEach(function (el) {
+      var flows = (el.getAttribute("data-flows") || "").split(" ");
+      el.classList.toggle("dim", flow !== "all" && flows.indexOf(flow) === -1);
+    });
+  }
+  chips.forEach(function (c) {
+    c.addEventListener("click", function () { setFlow(c.getAttribute("data-flow")); });
+  });
+
+  // Hover or focus a key row (or an inline reference) to light up that service.
+  function highlight(n, on) {
+    nodes.forEach(function (el) { if (el.getAttribute("data-n") === n) el.classList.toggle("hl", on); });
+    var row = document.querySelector('#key li[data-n="' + n + '"]');
+    if (row) row.classList.toggle("hl", on);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#key li[data-n], .ref[data-n]"), function (el) {
+    var n = el.getAttribute("data-n");
+    el.addEventListener("mouseenter", function () { highlight(n, true); });
+    el.addEventListener("mouseleave", function () { highlight(n, false); });
+    el.addEventListener("focus", function () { highlight(n, true); });
+    el.addEventListener("blur", function () { highlight(n, false); });
+  });
+
+  // Copy the onboarding commands without the comment annotations.
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = document.getElementById(btn.getAttribute("data-target"));
+      var text = pre.innerText.split("\n").filter(function (l) { return l.trim().charAt(0) !== "#"; })
+        .map(function (l) { return l.replace(/\s+# P[0-9–-]+.*$/, "").replace(/\s+# P.*$/, ""); }).join("\n").trim();
+      function done(label) { btn.textContent = label; setTimeout(function () { btn.textContent = "Copy"; }, 1600); }
+      try {
+        navigator.clipboard.writeText(text).then(function () { done("Copied"); }, function () { selectPre(pre); done("Selected"); });
+      } catch (e) { selectPre(pre); done("Selected"); }
+    });
+  });
+  function selectPre(pre) {
+    var r = document.createRange(); r.selectNodeContents(pre);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+})();
+</script>
+</body>
+</html>
