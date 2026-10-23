@@ -36,8 +36,9 @@ becomes in this guide:
 | `./scripts/x.sh` | `& $BASH -l ./scripts/x.sh` | `.sh` files need bash. See the next block |
 | `make <target>` | The commands behind the target | `make` isn't on PowerShell's PATH. Each step shows the commands to run instead |
 
-Variables (both `$X` and `$env:X`) last only for the current PowerShell window. If you
-open a new window, run Step 2 of Part 2 again.
+Variables (both `$X` and `$env:X`) last only for the current PowerShell window, and each
+VS Code terminal tab counts as its own window. If you open a new one, run Step 2 of Part 2
+again.
 
 Some steps still need bash, because the scripts in `scripts/` are `.sh` files. Git for
 Windows ships with bash. Point a variable at it once per window:
@@ -112,8 +113,10 @@ Same as `make migrate` and `make seed`:
 ```powershell
 python scripts/run_migrations.py --env local
 
+# An OPENAI_API_KEY environment variable wins over the one in .env. Clear any old one
+# so the key from .env is used (no error if none is set):
 [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $null, "User")
-Remove-Item Env:OPENAI_API_KEY   # also clear it from this terminal
+Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 
 python -m pipelines.data_pipeline ingest --source ./data/policies/ --domain claims --rebuild-graph
 python -m pipelines.data_pipeline verify --domain claims
@@ -313,13 +316,6 @@ render k8s config from Terraform outputs → install cluster add-ons → migrate
 deploy → smoke test. Terraform always runs before any `kubectl apply` — the cluster,
 database and IAM roles the manifests reference don't exist until Terraform creates them.
 
-> **Before you spend money — one known gap.** `src/app/core/secrets.py` only fetches the
-> RDS master password (it is added to `POSTGRES_DSN` from `RDS_SECRET_ARN` when the app
-> starts). Nothing fetches `OPENAI_API_KEY` from Secrets Manager yet, so a deployed pod
-> would start, then fail on its first LLM call and report `error: OPENAI_API_KEY not set`
-> on `/readyz`. The IAM permission is already granted — it's the code that's missing.
-> Expect to close that gap before the app actually serves a claim on AWS.
-
 ### Prerequisites
 
 AWS CLI v2, Terraform ≥1.6, `kubectl`, `helm`, Docker, Git for Windows (for its
@@ -327,8 +323,8 @@ AWS CLI v2, Terraform ≥1.6, `kubectl`, `helm`, Docker, Git for Windows (for it
 resources. `jq` is only needed by the bash scripts — Step 8 shows how to install it.
 
 **Use one PowerShell window for all of Part 2.** Steps 6–13 use variables set in earlier
-steps (`$ECR_URL`, `$IMAGE`, `$BASH` and so on). If you open a new window, run Step 2 and
-the first lines of Step 6 and Step 10 again.
+steps (`$ECR_URL`, `$IMAGE`, `$BASH` and so on). If you open a new window, run both blocks
+of Step 2 again from the repo root.
 
 ### What Terraform creates for you — IAM in particular
 
@@ -369,22 +365,28 @@ from your laptop, as this guide does, doesn't need it.
 ```powershell
 aws configure                                 # access key, secret key, region (us-east-1)
 aws sts get-caller-identity                   # confirms you're the right account
-Copy-Item .credentials.example .credentials   # gitignored — never commit real values
 ```
 
-Fill in `.credentials` with the same values, then load each `KEY=value` line into an
-environment variable (this replaces bash's `export $(grep -v '^#' .credentials | xargs)`):
+That's all the credentials setup you need. `aws`, `terraform` and the bash scripts all
+read `~/.aws/credentials`, which `aws configure` just wrote.
 
-```powershell
-Get-Content .credentials | Where-Object { $_ -match '^\s*[^#\s].*=' } | ForEach-Object {
-  $name, $value = $_ -split '=', 2
-  Set-Item -Path "env:$($name.Trim())" -Value $value.Trim()
-}
-```
+**Don't load `.credentials` into environment variables in PowerShell.** `AWS_ACCESS_KEY_ID`
+/ `AWS_SECRET_ACCESS_KEY` environment variables win over `aws configure`. If they hold an
+old or mistyped key, every later command fails with
+`InvalidClientTokenId: The security token included in the request is invalid`, even
+though `aws configure` is correct. Step 2 clears them, just in case.
 
 ### Step 2 — set deployment variables
 
+Run this at the start of Part 2, **and again in every new PowerShell window or VS Code
+terminal tab.** Variables don't carry over between windows. Almost every confusing error
+in Part 2 (`Backend configuration changed`, `bucket "-tfstate--" does not exist`,
+`--name: expected one argument`) comes from one of these being empty.
+
 ```powershell
+# drop any stray keys so `aws configure` is used (see Step 1)
+Remove-Item env:AWS_ACCESS_KEY_ID, env:AWS_SECRET_ACCESS_KEY, env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue
+
 $env:AWS_REGION = "us-east-1"
 $PROJECT        = "claim-adjudication"
 $CLUSTER_NAME   = "$PROJECT-eks"
@@ -393,16 +395,27 @@ $BASH           = "C:\Program Files\Git\bin\bash.exe"
 
 # the bash scripts in Steps 8 and 16 read PROJECT from the environment
 $env:PROJECT    = $PROJECT
+
+"$PROJECT / $CLUSTER_NAME / $ACCOUNT_ID / $env:AWS_REGION"
 ```
 
-Check them: `"$PROJECT / $CLUSTER_NAME / $ACCOUNT_ID / $env:AWS_REGION"` should print
-four non-empty values.
+The last line must print four non-empty values, for example
+`claim-adjudication / claim-adjudication-eks / 123456789012 / us-east-1`. If the account ID
+is empty, `aws sts` failed. Fix the credentials (Step 1) before going on.
+
+From Step 6 onward you also need `$ECR_URL` and `$IMAGE`. In a new window, run these from
+the repo root as well (they need `.tf-outputs.json` from Step 4e):
+
+```powershell
+$ECR_URL = (Get-Content .tf-outputs.json | ConvertFrom-Json).ecr_repository_url.value
+$IMAGE   = "$ECR_URL`:latest"
+```
 
 `AWS_REGION` here is for the `aws` CLI calls in this guide and in `scripts/`. It does
 **not** steer Terraform: the provider blocks set `region` explicitly (from `var.aws_region`),
 and an explicit provider `region` beats `AWS_REGION` and `~/.aws/config` both. Note also
-that `.credentials` is an ordinary key=value file — nothing reads it automatically, which
-is what the `Get-Content .credentials` block in Step 1 is for. To actually deploy to a
+that `.credentials` is an ordinary key=value file. Nothing reads it automatically, and
+this guide doesn't use it (see Step 1). To actually deploy to a
 different region, change `aws_region` **and** `availability_zones` in
 `infra/terraform/variables.tf`, `region` in `infra/terraform/backend.tf`, `aws_region` in
 `infra/terraform/envs/learning.tfvars`, and the `aws_region` default in `bootstrap/main.tf`.
@@ -412,6 +425,16 @@ different region, change `aws_region` **and** `availability_zones` in
 This is a **separate Terraform root module with its own local state** — it creates the S3
 bucket and DynamoDB table that the *main* module will then use as its remote backend. You
 can't bootstrap a remote backend with a remote backend, which is why it's split out.
+
+**Already done?** If someone on the team ran it for this account before, skip this step.
+Check from the repo root. If this lists the bucket without an error, the bootstrap
+exists:
+
+```powershell
+aws s3 ls "s3://$PROJECT-tfstate-$ACCOUNT_ID-$env:AWS_REGION"
+```
+
+Otherwise:
 
 ```powershell
 cd infra\terraform\bootstrap
@@ -436,6 +459,10 @@ Then:
 
 ```powershell
 cd infra\terraform
+
+# check first: must print claim-adjudication-tfstate-<account id>-us-east-1
+# If you see "-tfstate--" or "--", a variable is empty. Run Step 2 in this window.
+"$PROJECT-tfstate-$ACCOUNT_ID-$env:AWS_REGION"
 
 # 4a. init — wires this module to the S3 backend the bootstrap step created.
 #     The bucket name is <project>-tfstate-<account id>-<region>.
@@ -476,7 +503,9 @@ control:
 | Symptom | Cause / fix |
 |---|---|
 | `Error: Too many command line arguments` on `plan` / `destroy` | PowerShell split `-var-file=envs/learning.tfvars` at the dot. Quote it: `"-var-file=envs/learning.tfvars"` |
-| `Error: Failed to get existing workspaces: S3 bucket does not exist` on `init` | The bucket name is wrong or empty. Check `$PROJECT`, `$ACCOUNT_ID` and `$env:AWS_REGION` are set (Step 2) and compare with the `state_bucket` output from Step 3 |
+| `Error: Failed to get existing workspaces: S3 bucket "-tfstate--" does not exist` on `init` | `$PROJECT`, `$ACCOUNT_ID` and `$env:AWS_REGION` are empty, usually because this is a new window. Run Step 2, check the bucket name prints correctly, then `terraform init -reconfigure "-backend-config=bucket=$PROJECT-tfstate-$ACCOUNT_ID-$env:AWS_REGION"` |
+| `Error: Backend configuration changed` on `init` | Same cause: the bucket name you passed differs from the one saved by the last `init`, almost always because a variable is empty. **Don't** run `-migrate-state`. Run Step 2, check the bucket name, then use the `init -reconfigure` command from the row above. `-reconfigure` only re-saves the settings on your machine; it doesn't move or delete state |
+| `InvalidClientTokenId` from any `aws` command | A bad key is loaded in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` environment variables. Run the `Remove-Item env:AWS_...` line from Step 2 |
 | `Error: creating EKS Cluster: InvalidParameterException` on the AZ | Your account doesn't support one of the two AZs in `var.availability_zones` — change them in `learning.tfvars` |
 | `AccessDenied` partway through | The IAM identity from Step 1 is missing a permission; the error names the action — add it and re-run `apply` (Terraform resumes, it doesn't start over) |
 | `not enough space on the disk` at `init` | The AWS provider binary is ~600MB per module; free space or set `$env:TF_PLUGIN_CACHE_DIR = "E:\tf-cache"` (any drive with room; create the folder first) |
@@ -576,12 +605,14 @@ Writes three account-specific, gitignored files from `.tf-outputs.json`:
 
 | Generated file | Contents |
 |---|---|
-| `k8s/configmap.yaml` | `agents.yaml` + `tradeoff.yaml` as files, plus non-secret env (RDS endpoint, bucket, region, secret name) |
+| `k8s/configmap.yaml` | `agents.yaml` + `tradeoff.yaml` as files, plus non-secret env (RDS endpoint, `REDIS_URL`, bucket, region, secret name, `DOCUMENTS_DIR=/tmp/documents`) |
 | `k8s/serviceaccount.rendered.yaml` | The app's ServiceAccount, annotated with the `${project}-app-irsa` role ARN |
 | `k8s/alb-controller-serviceaccount.rendered.yaml` | The controller's ServiceAccount in `kube-system`, annotated with the `${project}-alb-controller` role ARN |
 
 The tracked `k8s/serviceaccount.yaml` and `k8s/alb-controller-serviceaccount.yaml` stay
-placeholder templates — the script never overwrites them.
+placeholder templates — the script never overwrites them. Don't hand-edit the generated
+files. Re-run the script after any `terraform apply` (re-export `.tf-outputs.json` first)
+or any change to `config/*.yaml`.
 
 ```powershell
 kubectl apply -f k8s/namespace.yaml
@@ -681,7 +712,12 @@ kubectl logs job/seed-data -n claim-adjudication
 
 ### Step 12 — deploy the app
 
+Run every line, including the first one: it is the one that creates the Deployment. If it
+is skipped, or `$IMAGE` is empty, the last line fails with
+`deployments.apps "claim-adjudication" not found`.
+
 ```powershell
+"$IMAGE"    # must print <account>.dkr.ecr.<region>.amazonaws.com/...:latest — if empty, see Step 2
 (Get-Content k8s/deployment.yaml -Raw) -replace '__ECR_REPOSITORY_URL__:__IMAGE_TAG__', $IMAGE | kubectl apply -f -
 kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/ingress.yaml
@@ -693,12 +729,39 @@ kubectl rollout status deployment/claim-adjudication -n claim-adjudication
 Don't use `make deploy` as a shortcut here: it needs bash, and it applies the manifests
 without replacing the image placeholder.
 
+A healthy rollout finishes in 1–2 minutes. If it's still waiting after 3 minutes, press
+Ctrl+C and look at why. Waiting longer won't help:
+
+```powershell
+kubectl get pods -n claim-adjudication
+kubectl logs -n claim-adjudication deploy/claim-adjudication --tail=30
+```
+
+| Pods show / logs say | Cause / fix |
+|---|---|
+| `CrashLoopBackOff`, `USE_REDIS is true but REDIS_URL is not set` | `k8s/configmap.yaml` was rendered by an old script. Re-run Step 8's render script, then apply the configmap and restart (below) |
+| `CrashLoopBackOff`, `No module named 'redis'` | The image was built from an old Dockerfile. Re-run Step 6 (build + push), then restart (below) |
+| Pods `Running`, but claims return `HTTP 500` and logs say `Read-only file system: 's3:'` | `DOCUMENTS_DIR` points at S3 or a Windows path. Check with `kubectl get configmap claim-adjudication-config -n claim-adjudication -o jsonpath='{.data.DOCUMENTS_DIR}'`. It must be `/tmp/documents`. Re-render (Step 8), apply and restart |
+| Warning `failed to get cpu utilization ... pods.metrics.k8s.io` on the HPA | Harmless. The cluster has no metrics-server, so the HPA can't scale yet. It doesn't block the rollout |
+
+Pods only read the ConfigMap and pull `:latest` when they start. After changing either one,
+restart them:
+
+```powershell
+kubectl apply -f k8s/configmap.yaml            # only if you re-rendered it
+kubectl rollout restart deployment/claim-adjudication -n claim-adjudication
+kubectl rollout status deployment/claim-adjudication -n claim-adjudication
+```
+
 ### Step 13 — smoke test through the ALB
 
 ```powershell
 $ALB_URL = kubectl get ingress claim-adjudication -n claim-adjudication `
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-"http://$ALB_URL"                    # DNS takes 2-3 minutes to resolve
+"http://$ALB_URL"                    # empty? the ALB isn't ready yet — wait a minute and re-run
+
+# DNS for a new ALB takes 2-3 minutes. Wait until this returns status: ok
+Invoke-RestMethod "http://$ALB_URL/healthz"
 
 & $BASH -l ./scripts/smoke_test.sh "http://$ALB_URL"
 ```
@@ -708,6 +771,23 @@ Or stream a claim against the live service the same way as local, just with `--u
 ```powershell
 python scripts/stream_client.py --url "http://$ALB_URL" --file tests/fixtures/claims/CLM-006.pdf
 ```
+
+A good run prints `[node_start]` / `[node_end]` lines and ends with `[final] {...}`. If it
+prints `HTTP 500: ...`, see the table in Step 12.
+
+Or use the browser UI from Part 1, step 7, pointed at the ALB:
+
+```powershell
+Start-Process ui\index.html
+```
+
+Set **API base** to the `http://...elb.amazonaws.com` URL printed above, then use the
+**Upload file** tab. **Server path** doesn't work here, because the pods have no `tests/`
+folder. Two limits of the deployed setup:
+
+- Uploaded files are saved in the pod's `/tmp`, so they're lost when the pod restarts.
+- The ALB closes a connection after 60 seconds with no data. A run where one step is
+  silent for longer than that gets cut off.
 
 ### Step 14 — the same thing via CI, no local CLI
 
@@ -822,7 +902,7 @@ throws away the state file that tracks everything else.
 ### Quick reference — command order
 
 ```
-aws configure + Get-Content .credentials + $env:AWS_REGION ...           # Step 1-2
+aws configure + $env:AWS_REGION, $PROJECT, $ACCOUNT_ID ... (every window)  # Step 1-2
   └─ infra\terraform\bootstrap  (terraform apply, once ever)             # Step 3
        └─ infra\terraform       (terraform init → validate → plan → apply)  # Step 4
             └─ terraform output -json | Set-Content -Encoding ascii .tf-outputs.json
