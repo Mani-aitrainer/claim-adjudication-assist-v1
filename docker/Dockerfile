@@ -13,7 +13,7 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --no-compile --prefix=/install ".[local]" \
+    && pip install --no-cache-dir --no-compile --prefix=/install ".[local,aws]" \
     && find /install -name '__pycache__' -type d -exec rm -rf {} + \
     && rm -rf /install/lib/python*/site-packages/pip* /install/lib/python*/site-packages/setuptools*
 
